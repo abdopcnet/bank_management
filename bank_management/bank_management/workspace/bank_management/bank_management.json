@@ -1,0 +1,115 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"YPYHvUuxYz\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Bank Management</span>\",\"col\":12}},{\"id\":\"0wsHtRdX_S\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bank\",\"col\":3}},{\"id\":\"oKXvDD325K\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bank Account\",\"col\":3}},{\"id\":\"VzxR1QePaH\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bank Account Type\",\"col\":3}},{\"id\":\"cf2AqOGltM\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"LOUvfSr4kM\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bank Transaction\",\"col\":3}},{\"id\":\"TsSKp0LWXQ\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bank Clearance\",\"col\":3}},{\"id\":\"c67WLAmOZl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bank Reconciliation Tool\",\"col\":3}},{\"id\":\"U_qGgfk4Ny\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bank Statement Import\",\"col\":3}},{\"id\":\"5xpK5ul9n9\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"ZlI9-qRGYG\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bank Account Subtype\",\"col\":3}},{\"id\":\"9BBc8T6T8q\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bank Guarantee\",\"col\":3}},{\"id\":\"zZOi6ePTy3\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports</b></span>\",\"col\":12}},{\"id\":\"V8KVTveajM\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bank Clearance Summary\",\"col\":3}},{\"id\":\"0e0TeRLxM7\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bank Reconciliation Statement\",\"col\":3}}]",
+ "creation": "2025-12-28 20:31:00.419071",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Bank Management",
+ "links": [],
+ "modified": "2025-12-28 20:38:37.683527",
+ "modified_by": "Administrator",
+ "module": "Bank Management",
+ "name": "Bank Management",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [],
+ "sequence_id": 28.0,
+ "shortcuts": [
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Bank Reconciliation Tool",
+   "link_to": "Bank Reconciliation Tool",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Bank Clearance Summary",
+   "link_to": "Bank Clearance Summary",
+   "report_ref_doctype": "Journal Entry",
+   "type": "Report"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Bank Account Type",
+   "link_to": "Bank Account Type",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Bank Reconciliation Statement",
+   "link_to": "Bank Reconciliation Statement",
+   "report_ref_doctype": "Journal Entry",
+   "type": "Report"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Bank Transaction",
+   "link_to": "Bank Transaction",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Bank Account Subtype",
+   "link_to": "Bank Account Subtype",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Bank Guarantee",
+   "link_to": "Bank Guarantee",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Bank Statement Import",
+   "link_to": "Bank Statement Import",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Bank Account",
+   "link_to": "Bank Account",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Bank Clearance",
+   "link_to": "Bank Clearance",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Bank",
+   "link_to": "Bank",
+   "stats_filter": "[]",
+   "type": "DocType"
+  }
+ ],
+ "title": "Bank Management"
+}
