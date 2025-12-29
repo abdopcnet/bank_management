@@ -9,6 +9,7 @@ frappe.query_reports['Bank Reconcile Report'] = {
 			fieldtype: 'Link',
 			options: 'Company',
 			reqd: 1,
+			default: frappe.defaults.get_default('company'),
 		},
 		{
 			fieldname: 'bank_account',
