@@ -178,7 +178,7 @@ def get_columns(filters):
             "fieldname": "bt_status",
             "label": "BT Status",
             "fieldtype": "Data",
-            "width": 100
+            "width": 180
         },
         {
             "fieldname": "bt_party",
@@ -298,6 +298,10 @@ def get_data(filters):
     if filters.get("reference_number"):
         bt_filters["reference_number"] = [
             "like", f"%{filters.get('reference_number')}%"]
+
+    # Filter by created_by
+    if filters.get("created_by"):
+        bt_filters["owner"] = filters.get("created_by")
 
     # Filter by reconciliation status (if exists, keep for backward compatibility)
     if filters.get("reconciliation_status"):
