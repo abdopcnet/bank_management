@@ -3,6 +3,7 @@
 
 frappe.query_reports['Bank Reconcile Report'] = {
 	filters: [
+		// First row: company, bank_account, bank_statement_from_date, bank_statement_to_date, created_by
 		{
 			fieldname: 'company',
 			label: __('Company'),
@@ -10,6 +11,7 @@ frappe.query_reports['Bank Reconcile Report'] = {
 			options: 'Company',
 			reqd: 1,
 			default: frappe.defaults.get_default('company'),
+			columns: 2,
 		},
 		{
 			fieldname: 'bank_account',
@@ -17,6 +19,7 @@ frappe.query_reports['Bank Reconcile Report'] = {
 			fieldtype: 'Link',
 			options: 'Bank Account',
 			reqd: 1,
+			columns: 2,
 			get_query: function () {
 				return {
 					filters: {
@@ -32,6 +35,7 @@ frappe.query_reports['Bank Reconcile Report'] = {
 			fieldtype: 'Date',
 			default: frappe.datetime.month_start(),
 			depends_on: 'eval:!doc.filter_by_reference_date',
+			columns: 2,
 		},
 		{
 			fieldname: 'bank_statement_to_date',
@@ -39,24 +43,36 @@ frappe.query_reports['Bank Reconcile Report'] = {
 			fieldtype: 'Date',
 			default: frappe.datetime.month_end(),
 			depends_on: 'eval:!doc.filter_by_reference_date',
+			columns: 2,
 		},
+		{
+			fieldname: 'created_by',
+			label: __('Created By'),
+			fieldtype: 'Link',
+			options: 'User',
+			columns: 2,
+		},
+		// Second row: filter_by_reference_date, from_reference_date, to_reference_date, account_opening_balance, bank_statement_closing_balance
 		{
 			fieldname: 'filter_by_reference_date',
 			label: __('Filter by Reference Date'),
 			fieldtype: 'Check',
 			default: 0,
+			columns: 2,
 		},
 		{
 			fieldname: 'from_reference_date',
 			label: __('From Reference Date'),
 			fieldtype: 'Date',
 			depends_on: 'eval:doc.filter_by_reference_date',
+			columns: 2,
 		},
 		{
 			fieldname: 'to_reference_date',
 			label: __('To Reference Date'),
 			fieldtype: 'Date',
 			depends_on: 'eval:doc.filter_by_reference_date',
+			columns: 2,
 		},
 		{
 			fieldname: 'account_opening_balance',
@@ -64,12 +80,14 @@ frappe.query_reports['Bank Reconcile Report'] = {
 			fieldtype: 'Currency',
 			read_only: 1,
 			depends_on: 'eval:doc.bank_statement_from_date',
+			columns: 2,
 		},
 		{
 			fieldname: 'bank_statement_closing_balance',
 			label: __('Closing Balance'),
 			fieldtype: 'Currency',
 			depends_on: 'eval:doc.bank_statement_to_date',
+			columns: 2,
 		},
 	],
 
@@ -407,6 +425,24 @@ function open_bulk_bank_transaction(report) {
 		bank_account: filters.bank_account || '',
 		company: filters.company || '',
 	};
+}
+
+function add_filter_separator() {
+	// Add separator after first 5 filters (first row)
+	const filter_wrapper = $('.filter-section .filter-container');
+	if (filter_wrapper.length) {
+		const filter_items = filter_wrapper.find('.form-group');
+		if (filter_items.length >= 5) {
+			// Find the 5th filter (created_by)
+			const fifth_filter = filter_items.eq(4);
+			if (fifth_filter.length && !fifth_filter.next().hasClass('filter-separator')) {
+				const separator = $(
+					'<div class="filter-separator" style="width: 100%; height: 1px; background: #d1d8dd; margin: 15px 0; clear: both;"></div>',
+				);
+				fifth_filter.after(separator);
+			}
+		}
+	}
 }
 
 function bulk_reconcile_selected(report) {
