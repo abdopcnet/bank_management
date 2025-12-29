@@ -1,0 +1,146 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-12-29 08:25:37.047034",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "bank_transaction",
+  "date",
+  "status",
+  "bank_account",
+  "company",
+  "deposit",
+  "withdrawal",
+  "currency",
+  "reference_number",
+  "allocated_amount",
+  "unallocated_amount",
+  "party_type",
+  "party",
+  "included_fee",
+  "excluded_fee"
+ ],
+ "fields": [
+  {
+   "fieldname": "bank_transaction",
+   "fieldtype": "Link",
+   "label": "Bank Transaction",
+   "options": "Bank Transaction"
+  },
+  {
+   "fetch_from": "bank_transaction.date",
+   "fieldname": "date",
+   "fieldtype": "Data",
+   "label": "Date",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bank_transaction.status",
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "label": "status",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bank_transaction.bank_account",
+   "fieldname": "bank_account",
+   "fieldtype": "Data",
+   "label": " Bank Account ",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bank_transaction.company",
+   "fieldname": "company",
+   "fieldtype": "Data",
+   "label": "company",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bank_transaction.deposit",
+   "fieldname": "deposit",
+   "fieldtype": "Data",
+   "label": "Deposit",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bank_transaction.withdrawal",
+   "fieldname": "withdrawal",
+   "fieldtype": "Data",
+   "label": "Withdrawal",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bank_transaction.currency",
+   "fieldname": "currency",
+   "fieldtype": "Data",
+   "label": "Currency",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bank_transaction.reference_number",
+   "fieldname": "reference_number",
+   "fieldtype": "Data",
+   "label": " Reference Number",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bank_transaction.allocated_amount",
+   "fieldname": "allocated_amount",
+   "fieldtype": "Data",
+   "label": "Allocated Amount",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bank_transaction.unallocated_amount",
+   "fieldname": "unallocated_amount",
+   "fieldtype": "Data",
+   "label": "Unallocated Amount",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bank_transaction.party_type",
+   "fieldname": "party_type",
+   "fieldtype": "Data",
+   "label": "Party Type",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bank_transaction.party",
+   "fieldname": "party",
+   "fieldtype": "Data",
+   "label": "Party",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bank_transaction.included_fee",
+   "fieldname": "included_fee",
+   "fieldtype": "Data",
+   "label": "Included Fee",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bank_transaction.excluded_fee",
+   "fieldname": "excluded_fee",
+   "fieldtype": "Data",
+   "label": "Excluded Fee",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-12-29 08:33:32.286431",
+ "modified_by": "Administrator",
+ "module": "Bank Management",
+ "name": "Bank Transactions",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
