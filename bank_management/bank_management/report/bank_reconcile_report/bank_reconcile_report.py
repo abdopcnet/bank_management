@@ -175,18 +175,6 @@ def get_columns(filters):
             "width": 120
         },
         {
-            "fieldname": "bt_status",
-            "label": "BT Status",
-            "fieldtype": "Data",
-            "width": 180
-        },
-        {
-            "fieldname": "bt_party",
-            "label": "BT Party",
-            "fieldtype": "Data",
-            "width": 120
-        },
-        {
             "fieldname": "voucher_doc_type",
             "label": "Voucher Type",
             "fieldtype": "Data",
@@ -346,8 +334,6 @@ def get_data(filters):
             "bt_withdrawal": flt(bt.withdrawal),
             "bt_reference_number": bt.reference_number or "",
             "bt_unallocated_amount": flt(bt.unallocated_amount),
-            "bt_status": bt.status,
-            "bt_party": (bt.party or "") + (" (" + bt.party_type + ")" if bt.party_type else ""),
         }
 
         # Get unmatched vouchers (always show potential matches, not just when checkbox is checked)
