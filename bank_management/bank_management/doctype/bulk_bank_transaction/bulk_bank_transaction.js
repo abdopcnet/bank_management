@@ -8,23 +8,22 @@ frappe.ui.form.on('Bulk Bank Transaction', {
 			frm.add_custom_button(__('Create Bank Transactions'), function () {
 				create_bank_transactions(frm);
 			});
+
+			// Add button to open Bank Reconcile Report
+			if (frm.doc.bank_account) {
+				frm.add_custom_button(__('Bank Reconcile Report'), function () {
+					open_bank_reconcile_report(frm);
+				});
+			}
 		}
 	},
-});
 
-frappe.ui.form.on('Bank Transactions Table', {
-	bank_account(frm, cdt, cdn) {
-		let row = locals[cdt][cdn];
-		if (row.bank_account) {
-			// Auto-fetch company from bank account if not set in parent
-			frappe.db.get_value('Bank Account', row.bank_account, 'company', function (r) {
-				if (r && r.company && !frm.doc.company) {
-					frappe.model.set_value(
-						'Bulk Bank Transaction',
-						frm.doc.name,
-						'company',
-						r.company,
-					);
+	bank_account(frm) {
+		// Auto-fetch company from bank account if not set
+		if (frm.doc.bank_account && !frm.doc.company) {
+			frappe.db.get_value('Bank Account', frm.doc.bank_account, 'company', function (r) {
+				if (r && r.company) {
+					frm.set_value('company', r.company);
 				}
 			});
 		}
@@ -86,5 +85,32 @@ function call_create_method(frm) {
 				}
 			}
 		},
+	});
+}
+
+function open_bank_reconcile_report(frm) {
+	if (!frm.doc.bank_account) {
+		frappe.msgprint(__('Please select Bank Account first'));
+		return;
+	}
+
+	// Get default company
+	let company = frm.doc.company || frappe.defaults.get_default('company');
+
+	// Build URL with filters
+	let filters = {
+		company: company,
+		bank_account: frm.doc.bank_account,
+	};
+
+	// Convert filters to URL format
+	let filter_string = Object.keys(filters)
+		.map((key) => `${key}=${encodeURIComponent(filters[key])}`)
+		.join('&');
+
+	// Open report
+	frappe.set_route('query-report', 'Bank Reconcile Report', {
+		company: company,
+		bank_account: frm.doc.bank_account,
 	});
 }
