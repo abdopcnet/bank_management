@@ -5,6 +5,11 @@ import frappe
 import json
 from frappe import _
 from frappe.utils import flt, getdate
+from erpnext.accounts.report.bank_reconciliation_statement.bank_reconciliation_statement import (
+    get_amounts_not_reflected_in_system,
+    get_entries,
+)
+from erpnext.accounts.utils import get_account_currency, get_balance_on
 
 
 @frappe.whitelist()
@@ -124,7 +129,10 @@ def execute(filters=None):
     columns = get_columns(filters)
     data = get_data(filters)
 
-    return columns, data
+    # Calculate report summary (closing balances)
+    report_summary = get_report_summary(filters, data)
+
+    return columns, data, None, None, report_summary
 
 
 def get_columns(filters):
@@ -262,23 +270,42 @@ def get_data(filters):
         bt_filters["company"] = filters.get("company")
     if filters.get("bank_account"):
         bt_filters["bank_account"] = filters.get("bank_account")
-    if filters.get("from_date"):
-        bt_filters["date"] = [">=", filters.get("from_date")]
-    if filters.get("to_date"):
+
+    # Use bank_statement_from_date/to_date or fallback to from_date/to_date
+    from_date = filters.get(
+        "bank_statement_from_date") or filters.get("from_date")
+    to_date = filters.get("bank_statement_to_date") or filters.get("to_date")
+
+    if from_date:
+        bt_filters["date"] = [">=", from_date]
+    if to_date:
         if "date" in bt_filters and isinstance(bt_filters["date"], list):
-            bt_filters["date"].append(["<=", filters.get("to_date")])
+            bt_filters["date"].append(["<=", to_date])
         else:
-            bt_filters["date"] = ["<=", filters.get("to_date")]
+            bt_filters["date"] = ["<=", to_date]
+
+    # Filter by reference date if enabled
+    if filters.get("filter_by_reference_date"):
+        from_ref_date = filters.get("from_reference_date")
+        to_ref_date = filters.get("to_reference_date")
+        if from_ref_date:
+            bt_filters["reference_date"] = [">=", from_ref_date]
+        if to_ref_date:
+            if "reference_date" in bt_filters and isinstance(bt_filters["reference_date"], list):
+                bt_filters["reference_date"].append(["<=", to_ref_date])
+            else:
+                bt_filters["reference_date"] = ["<=", to_ref_date]
     if filters.get("reference_number"):
         bt_filters["reference_number"] = [
             "like", f"%{filters.get('reference_number')}%"]
 
-    # Filter by reconciliation status
-    if filters.get("reconciliation_status") == "Reconciled":
-        bt_filters["status"] = "Reconciled"
-    elif filters.get("reconciliation_status") == "Unreconciled":
-        bt_filters["status"] = ["in", ["Pending", "Unreconciled"]]
-        bt_filters["unallocated_amount"] = [">", 0]
+    # Filter by reconciliation status (if exists, keep for backward compatibility)
+    if filters.get("reconciliation_status"):
+        if filters.get("reconciliation_status") == "Reconciled":
+            bt_filters["status"] = "Reconciled"
+        elif filters.get("reconciliation_status") == "Unreconciled":
+            bt_filters["status"] = ["in", ["Pending", "Unreconciled"]]
+            bt_filters["unallocated_amount"] = [">", 0]
 
     bank_transactions = frappe.get_all(
         "Bank Transaction",
@@ -307,12 +334,6 @@ def get_data(filters):
     for bt in bank_transactions:
         # Get linked vouchers for this bank transaction
         linked_vouchers = get_linked_vouchers(bt.name)
-        is_reconciled = (bt.status == "Reconciled" or flt(
-            bt.unallocated_amount) == 0)
-
-        # Skip reconciled transactions when show_unmatched_vouchers is enabled
-        if filters.get("show_unmatched_vouchers") and is_reconciled:
-            continue
 
         base_row = {
             "bt_name": bt.name,
@@ -325,9 +346,9 @@ def get_data(filters):
             "bt_party": (bt.party or "") + (" (" + bt.party_type + ")" if bt.party_type else ""),
         }
 
-        # Get unmatched vouchers if show_unmatched_vouchers is enabled
+        # Get unmatched vouchers (always show potential matches, not just when checkbox is checked)
         unmatched_vouchers = []
-        if filters.get("show_unmatched_vouchers") and flt(bt.unallocated_amount) > 0:
+        if flt(bt.unallocated_amount) > 0:
             unmatched_vouchers = get_unmatched_vouchers(bt, filters)
 
         # Initialize counter for this reference number
@@ -348,9 +369,9 @@ def get_data(filters):
                     "voucher_amount": flt(voucher.get("amount", 0)),
                     "voucher_party": voucher.get("party", ""),
                     "reconciled_status": get_status_emoji(bt.status, flt(bt.unallocated_amount), has_voucher=True, is_matched=True, row_number=row_counter[ref_key]),
-                    "btn_reconcile": get_reconcile_button(bt.name, flt(bt.unallocated_amount), voucher.get("name"), voucher.get("doctype")),
-                    "btn_create_pe": get_create_pe_button(bt.name, flt(bt.unallocated_amount), bt.party_type, bt.party, bt.reference_number, bt.date, has_voucher=True),
-                    "btn_create_je": get_create_je_button(bt.name, flt(bt.unallocated_amount), has_voucher=True),
+                    "btn_reconcile": get_reconcile_button(bt.name, flt(bt.unallocated_amount), voucher.get("name"), voucher.get("doctype"), bt.status),
+                    "btn_create_pe": get_create_pe_button(bt.name, flt(bt.unallocated_amount), bt.party_type, bt.party, bt.reference_number, bt.date, has_voucher=True, voucher_type=voucher.get("doctype")),
+                    "btn_create_je": get_create_je_button(bt.name, flt(bt.unallocated_amount), has_voucher=True, voucher_type=voucher.get("doctype")),
                     "btn_create_bt": get_create_bt_button(voucher.get("doctype"), voucher.get("name"), has_bt=True)
                 })
                 data.append(voucher_row)
@@ -368,9 +389,9 @@ def get_data(filters):
                 "voucher_amount": flt(voucher.get("amount", 0)),
                 "voucher_party": voucher.get("party", ""),
                 "reconciled_status": get_status_emoji(bt.status, flt(bt.unallocated_amount), has_voucher=True, is_matched=False, row_number=row_counter[ref_key]),
-                "btn_reconcile": get_reconcile_button(bt.name, flt(bt.unallocated_amount), voucher.get("name"), voucher.get("doctype")),
-                "btn_create_pe": get_create_pe_button(bt.name, flt(bt.unallocated_amount), bt.party_type, bt.party, bt.reference_number, bt.date, has_voucher=True),
-                "btn_create_je": get_create_je_button(bt.name, flt(bt.unallocated_amount), has_voucher=True),
+                "btn_reconcile": get_reconcile_button(bt.name, flt(bt.unallocated_amount), voucher.get("name"), voucher.get("doctype"), bt.status),
+                "btn_create_pe": get_create_pe_button(bt.name, flt(bt.unallocated_amount), bt.party_type, bt.party, bt.reference_number, bt.date, has_voucher=True, voucher_type=voucher.get("doctype")),
+                "btn_create_je": get_create_je_button(bt.name, flt(bt.unallocated_amount), has_voucher=True, voucher_type=voucher.get("doctype")),
                 "btn_create_bt": get_create_bt_button(voucher.get("doctype"), voucher.get("name"), has_bt=True)
             })
             data.append(unmatched_row)
@@ -623,8 +644,12 @@ def get_status_emoji(status, unallocated_amount, has_voucher=False, is_matched=F
         return f"{emoji} ⏳ {status_name}"
 
 
-def get_reconcile_button(bt_name, unallocated_amount, voucher_name=None, voucher_doc_type=None):
-    if unallocated_amount <= 0:
+def get_reconcile_button(bt_name, unallocated_amount, voucher_name=None, voucher_doc_type=None, status=None):
+    # Show button only if status is NOT "Reconciled"
+    if status == "Reconciled":
+        return ""
+
+    if unallocated_amount <= 0 and not voucher_name:
         return ""
 
     if voucher_name and voucher_doc_type:
@@ -633,9 +658,14 @@ def get_reconcile_button(bt_name, unallocated_amount, voucher_name=None, voucher
         return f'<button class="btn btn-xs btn-primary reconcile-btn" data-bt="{bt_name}">🔗 Reconcile</button>'
 
 
-def get_create_pe_button(bt_name, unallocated_amount, party_type, party, reference_number=None, date=None, has_voucher=False):
-    """Button to create Payment Entry - only show if no voucher exists in the row"""
-    if has_voucher:
+def get_create_pe_button(bt_name, unallocated_amount, party_type, party, reference_number=None, date=None, has_voucher=False, voucher_type=None):
+    """Button to create Payment Entry - show if voucher_type is NOT Payment Entry or no voucher exists"""
+    if voucher_type == "Payment Entry":
+        return ""
+    if has_voucher and voucher_type and voucher_type != "Payment Entry":
+        # Show button even if voucher exists but it's not Payment Entry
+        pass
+    elif has_voucher:
         return ""
     if unallocated_amount <= 0:
         return ""
@@ -646,9 +676,14 @@ def get_create_pe_button(bt_name, unallocated_amount, party_type, party, referen
     return f'<button class="btn btn-xs btn-success create-pe-btn" data-bt="{bt_name}" data-party-type="{party_type}" data-party="{party}"{ref_no_attr}{date_attr}>➕ Payment Entry</button>'
 
 
-def get_create_je_button(bt_name, unallocated_amount, has_voucher=False):
-    """Button to create Journal Entry - only show if no voucher exists in the row"""
-    if has_voucher:
+def get_create_je_button(bt_name, unallocated_amount, has_voucher=False, voucher_type=None):
+    """Button to create Journal Entry - show if voucher_type is NOT Journal Entry or no voucher exists"""
+    if voucher_type == "Journal Entry":
+        return ""
+    if has_voucher and voucher_type and voucher_type != "Journal Entry":
+        # Show button even if voucher exists but it's not Journal Entry
+        pass
+    elif has_voucher:
         return ""
     if unallocated_amount <= 0:
         return ""
@@ -656,9 +691,96 @@ def get_create_je_button(bt_name, unallocated_amount, has_voucher=False):
 
 
 def get_create_bt_button(voucher_doc_type, voucher_name, has_bt=False):
-    """Button to create Bank Transaction from Payment Entry or Journal Entry - only show if no Bank Transaction exists in the row"""
+    """Button to create Bank Transaction from Payment Entry or Journal Entry - only show if bt_name is null (no Bank Transaction exists)"""
     if has_bt:
         return ""
     if not voucher_doc_type or not voucher_name:
         return ""
     return f'<button class="btn btn-xs btn-warning create-bt-btn" data-doctype="{voucher_doc_type}" data-voucher="{voucher_name}">➕ Bank Transaction</button>'
+
+
+def get_account_balance(bank_account, till_date, company):
+    """Returns account balance till the specified date (from ERPNext Bank Reconciliation Tool)"""
+    account = frappe.db.get_value("Bank Account", bank_account, "account")
+    if not account:
+        return 0.0
+
+    filters = frappe._dict({
+        "account": account,
+        "report_date": till_date,
+        "include_pos_transactions": 1,
+        "company": company,
+    })
+
+    data = get_entries(filters)
+    balance_as_per_system = get_balance_on(
+        filters["account"], filters["report_date"])
+
+    total_debit, total_credit = 0.0, 0.0
+    for d in data:
+        total_debit += flt(d.debit)
+        total_credit += flt(d.credit)
+
+    amounts_not_reflected_in_system = get_amounts_not_reflected_in_system(
+        filters)
+
+    return flt(balance_as_per_system) - flt(total_debit) + flt(total_credit) + amounts_not_reflected_in_system
+
+
+def get_report_summary(filters, data):
+    """Calculate and return report summary with closing balances"""
+    summary = []
+
+    if not filters.get("bank_account") or not filters.get("company"):
+        return summary
+
+    # Get account currency
+    account = frappe.db.get_value(
+        "Bank Account", filters.get("bank_account"), "account")
+    if not account:
+        return summary
+
+    currency = get_account_currency(account) or frappe.db.get_value(
+        "Company", filters.get("company"), "default_currency")
+
+    # Get closing balance as per bank statement
+    bank_statement_closing = flt(filters.get(
+        "bank_statement_closing_balance", 0))
+
+    # Get closing balance as per ERP (system)
+    to_date = filters.get("bank_statement_to_date") or filters.get("to_date")
+    if to_date:
+        cleared_balance = get_account_balance(
+            filters.get("bank_account"),
+            to_date,
+            filters.get("company")
+        )
+    else:
+        cleared_balance = 0.0
+
+    # Calculate difference
+    difference = bank_statement_closing - cleared_balance
+
+    # Build summary
+    summary.append({
+        "value": cleared_balance,
+        "label": _("Closing Balance as per ERP"),
+        "indicator": "blue",
+        "currency": currency
+    })
+
+    summary.append({
+        "value": bank_statement_closing,
+        "label": _("Closing Balance as per Bank Statement"),
+        "indicator": "orange",
+        "currency": currency
+    })
+
+    summary.append({
+        "value": abs(difference),
+        "label": _("Difference"),
+        "indicator": "green" if abs(difference) < 0.01 else "red",
+        "currency": currency
+    })
+
+    return summary
