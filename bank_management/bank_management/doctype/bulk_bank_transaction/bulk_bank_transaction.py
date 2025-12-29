@@ -31,6 +31,10 @@ class BulkBankTransaction(Document):
     @frappe.whitelist()
     def create_bank_transactions(self):
         """Create all Bank Transactions from the table as Draft"""
+        # Ensure document is saved first to get name
+        if self.is_new():
+            self.save()
+
         # Reload to get latest data
         self.reload()
 
@@ -40,8 +44,15 @@ class BulkBankTransaction(Document):
         created_count = 0
         errors = []
 
+        # Store the Bulk Bank Transaction name for linking
+        bulk_bank_transaction_name = self.name
+
         for idx, row in enumerate(self.bank_transactions_table, start=1):
             try:
+                # Skip if Bank Transaction already created for this row
+                if row.bank_transaction:
+                    continue
+
                 # Validate required fields
                 if not row.date:
                     errors.append(_("Row {0}: Date is required").format(idx))
@@ -96,15 +107,25 @@ class BulkBankTransaction(Document):
                 bank_transaction.currency = currency
                 bank_transaction.description = row.description or ""
                 bank_transaction.reference_number = row.reference_number or ""
+                # Link to Bulk Bank Transaction
+                bank_transaction.custom_created_from = bulk_bank_transaction_name
 
                 # Insert as Draft (don't submit)
                 bank_transaction.insert()
+
+                # Update the row with created Bank Transaction name
+                row.bank_transaction = bank_transaction.name
+
                 created_count += 1
 
             except Exception as e:
                 frappe.log_error(
                     "[bulk_bank_transaction.py] method: create_bank_transactions", "Bulk Bank Transaction")
                 errors.append(_("Row {0}: {1}").format(idx, str(e)))
+
+        # Save the Bulk Bank Transaction to persist the bank_transaction links in child table
+        if created_count > 0:
+            self.save()
 
         # Show message
         message = _("{0} Bank Transaction(s) created successfully").format(
