@@ -21,51 +21,80 @@ frappe.query_reports['Bank Reconcile Report'] = {
 				return {
 					filters: {
 						company: frappe.query_report.get_filter_value('company'),
+						is_company_account: 1,
 					},
 				};
 			},
 		},
 		{
-			fieldname: 'from_date',
+			fieldname: 'bank_statement_from_date',
 			label: __('From Date'),
 			fieldtype: 'Date',
 			default: frappe.datetime.month_start(),
+			depends_on: 'eval:!doc.filter_by_reference_date',
 		},
 		{
-			fieldname: 'to_date',
+			fieldname: 'bank_statement_to_date',
 			label: __('To Date'),
 			fieldtype: 'Date',
 			default: frappe.datetime.month_end(),
+			depends_on: 'eval:!doc.filter_by_reference_date',
 		},
 		{
-			fieldname: 'reference_number',
-			label: __('Reference Number'),
-			fieldtype: 'Data',
-			description: __('Filter by reference number (partial match)'),
-		},
-		{
-			fieldname: 'reconciliation_status',
-			label: __('Reconciliation Status'),
-			fieldtype: 'Select',
-			options: '\nReconciled\nUnreconciled\nAll',
-			default: 'All',
-		},
-		{
-			fieldname: 'show_unmatched_vouchers',
-			label: __('Show Unmatched Vouchers'),
+			fieldname: 'filter_by_reference_date',
+			label: __('Filter by Reference Date'),
 			fieldtype: 'Check',
 			default: 0,
-			description: __(
-				'Show Payment Entries and Journal Entries that are potential matches but not yet linked to Bank Transactions. These vouchers match by reference number, amount, date, or party.',
-			),
+		},
+		{
+			fieldname: 'from_reference_date',
+			label: __('From Reference Date'),
+			fieldtype: 'Date',
+			depends_on: 'eval:doc.filter_by_reference_date',
+		},
+		{
+			fieldname: 'to_reference_date',
+			label: __('To Reference Date'),
+			fieldtype: 'Date',
+			depends_on: 'eval:doc.filter_by_reference_date',
+		},
+		{
+			fieldname: 'account_opening_balance',
+			label: __('Account Opening Balance'),
+			fieldtype: 'Currency',
+			read_only: 1,
+			depends_on: 'eval:doc.bank_statement_from_date',
+		},
+		{
+			fieldname: 'bank_statement_closing_balance',
+			label: __('Closing Balance'),
+			fieldtype: 'Currency',
+			depends_on: 'eval:doc.bank_statement_to_date',
 		},
 	],
 
 	onload: function (report) {
-		// Add button to open General Ledger (direct button, not in dropdown)
+		// Add buttons (direct buttons, not in dropdown)
 		report.page.add_inner_button(__('📖 General Ledger'), function () {
 			open_general_ledger(report);
 		});
+
+		report.page.add_inner_button(__('➕ Create Bulk Bank Transaction'), function () {
+			open_bulk_bank_transaction(report);
+		});
+
+		// Set default dates
+		let filters = report.get_filter_values();
+		if (!filters.bank_statement_from_date) {
+			let today = frappe.datetime.get_today();
+			report.set_filter_value(
+				'bank_statement_from_date',
+				frappe.datetime.add_months(today, -1),
+			);
+		}
+		if (!filters.bank_statement_to_date) {
+			report.set_filter_value('bank_statement_to_date', frappe.datetime.get_today());
+		}
 	},
 
 	formatter: function (value, row, column, data, default_formatter) {
@@ -352,8 +381,8 @@ function open_general_ledger(report) {
 				// Build route options
 				const route_options = {
 					company: filters.company || '',
-					from_date: filters.from_date || '',
-					to_date: filters.to_date || '',
+					from_date: filters.bank_statement_from_date || filters.from_date || '',
+					to_date: filters.bank_statement_to_date || filters.to_date || '',
 					account: JSON.stringify([gl_account]),
 					categorize_by: 'Categorize by Voucher (Consolidated)',
 					include_dimensions: 1,
@@ -365,6 +394,19 @@ function open_general_ledger(report) {
 			}
 		},
 	});
+}
+
+function open_bulk_bank_transaction(report) {
+	const filters = report.get_filter_values();
+
+	// Open new Bulk Bank Transaction form with bank_account pre-filled
+	frappe.set_route('Form', 'Bulk Bank Transaction', 'new');
+
+	// Set bank_account after form loads
+	frappe.route_options = {
+		bank_account: filters.bank_account || '',
+		company: filters.company || '',
+	};
 }
 
 function bulk_reconcile_selected(report) {
