@@ -7,7 +7,6 @@
  "engine": "InnoDB",
  "field_order": [
   "date",
-  "bank_account",
   "deposit",
   "withdrawal",
   "reference_number",
@@ -21,15 +20,6 @@
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "Date",
-   "reqd": 1
-  },
-  {
-   "columns": 1,
-   "fieldname": "bank_account",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Bank Account",
-   "options": "Bank Account",
    "reqd": 1
   },
   {
@@ -76,7 +66,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-12-29 14:54:42.719540",
+ "modified": "2025-12-29 14:58:18.676409",
  "modified_by": "Administrator",
  "module": "Bank Management",
  "name": "Bank Transactions Table",
