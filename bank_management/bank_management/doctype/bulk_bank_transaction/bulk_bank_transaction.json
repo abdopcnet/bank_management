@@ -8,6 +8,8 @@
  "field_order": [
   "date",
   "column_break_kcbp",
+  "bank_account",
+  "column_break_hvpo",
   "company",
   "section_break_qgzl",
   "bank_transactions_table"
@@ -38,6 +40,16 @@
   {
    "fieldname": "section_break_qgzl",
    "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "bank_account",
+   "fieldtype": "Link",
+   "label": "Bank Account",
+   "options": "Bank Account"
+  },
+  {
+   "fieldname": "column_break_hvpo",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
@@ -48,7 +60,7 @@
    "link_fieldname": "custom_created_from"
   }
  ],
- "modified": "2025-12-29 14:35:54.998413",
+ "modified": "2025-12-29 14:57:56.934744",
  "modified_by": "Administrator",
  "module": "Bank Management",
  "name": "Bulk Bank Transaction",
