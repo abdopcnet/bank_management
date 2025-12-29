@@ -9,6 +9,10 @@ from frappe.utils import flt, getdate
 
 class BulkBankTransaction(Document):
     def validate(self):
+        # Validate that bank_account is set
+        if not self.bank_account:
+            frappe.throw(_("Bank Account is required"))
+
         # Validate that at least one row exists
         if not self.bank_transactions_table:
             frappe.throw(
@@ -18,10 +22,6 @@ class BulkBankTransaction(Document):
         for row in self.bank_transactions_table:
             if not row.date:
                 frappe.throw(_("Date is required for all Bank Transactions"))
-
-            if not row.bank_account:
-                frappe.throw(
-                    _("Bank Account is required for all Bank Transactions"))
 
             # At least one of deposit or withdrawal must be provided
             if not flt(row.deposit) and not flt(row.withdrawal):
@@ -38,6 +38,10 @@ class BulkBankTransaction(Document):
         # Reload to get latest data
         self.reload()
 
+        # Validate bank_account is set
+        if not self.bank_account:
+            frappe.throw(_("Bank Account is required"))
+
         if not self.bank_transactions_table:
             frappe.throw(_("No Bank Transactions to create"))
 
@@ -46,6 +50,33 @@ class BulkBankTransaction(Document):
 
         # Store the Bulk Bank Transaction name for linking
         bulk_bank_transaction_name = self.name
+
+        # Get company from bank account if not provided in parent
+        company = self.company
+        if not company:
+            company = frappe.db.get_value(
+                "Bank Account", self.bank_account, "company")
+            if not company:
+                frappe.throw(
+                    _("Company not found for Bank Account {0}").format(self.bank_account))
+
+        # Get currency from bank account's linked account, or company default
+        account = frappe.db.get_value(
+            "Bank Account", self.bank_account, "account")
+        if account:
+            currency = frappe.db.get_value(
+                "Account", account, "account_currency")
+        else:
+            currency = None
+
+        # Fallback to company default currency if not found
+        if not currency:
+            currency = frappe.db.get_value(
+                "Company", company, "default_currency")
+
+        if not currency:
+            frappe.throw(
+                _("Currency not found for Bank Account {0}").format(self.bank_account))
 
         for idx, row in enumerate(self.bank_transactions_table, start=1):
             try:
@@ -58,49 +89,15 @@ class BulkBankTransaction(Document):
                     errors.append(_("Row {0}: Date is required").format(idx))
                     continue
 
-                if not row.bank_account:
-                    errors.append(
-                        _("Row {0}: Bank Account is required").format(idx))
-                    continue
-
                 if not flt(row.deposit) and not flt(row.withdrawal):
                     errors.append(
                         _("Row {0}: Either Deposit or Withdrawal must be provided").format(idx))
                     continue
 
-                # Get company from bank account if not provided in parent
-                company = self.company
-                if not company:
-                    company = frappe.db.get_value(
-                        "Bank Account", row.bank_account, "company")
-                    if not company:
-                        errors.append(_("Row {0}: Company not found for Bank Account {1}").format(
-                            idx, row.bank_account))
-                        continue
-
-                # Get currency from bank account's linked account, or company default
-                account = frappe.db.get_value(
-                    "Bank Account", row.bank_account, "account")
-                if account:
-                    currency = frappe.db.get_value(
-                        "Account", account, "account_currency")
-                else:
-                    currency = None
-
-                # Fallback to company default currency if not found
-                if not currency:
-                    currency = frappe.db.get_value(
-                        "Company", company, "default_currency")
-
-                if not currency:
-                    errors.append(_("Row {0}: Currency not found for Bank Account {1}").format(
-                        idx, row.bank_account))
-                    continue
-
                 # Create Bank Transaction
                 bank_transaction = frappe.new_doc("Bank Transaction")
                 bank_transaction.date = row.date
-                bank_transaction.bank_account = row.bank_account
+                bank_transaction.bank_account = self.bank_account
                 bank_transaction.company = company
                 bank_transaction.deposit = flt(row.deposit)
                 bank_transaction.withdrawal = flt(row.withdrawal)
