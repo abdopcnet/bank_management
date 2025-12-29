@@ -11,7 +11,8 @@
   "deposit",
   "withdrawal",
   "reference_number",
-  "description"
+  "description",
+  "bank_transaction"
  ],
  "fields": [
   {
@@ -60,13 +61,22 @@
    "fieldtype": "Small Text",
    "in_list_view": 1,
    "label": "Reference Number"
+  },
+  {
+   "columns": 1,
+   "fieldname": "bank_transaction",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Bank Transaction",
+   "options": "Bank Transaction",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-12-29 14:09:06.822523",
+ "modified": "2025-12-29 14:54:42.719540",
  "modified_by": "Administrator",
  "module": "Bank Management",
  "name": "Bank Transactions Table",
