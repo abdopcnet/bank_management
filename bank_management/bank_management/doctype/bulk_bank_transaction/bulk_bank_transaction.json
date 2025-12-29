@@ -1,0 +1,74 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:{date}-{#####}",
+ "creation": "2025-12-29 11:35:44.698515",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "date",
+  "column_break_kcbp",
+  "company",
+  "section_break_qgzl",
+  "bank_transactions_table"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "bank_transactions_table",
+   "fieldtype": "Table",
+   "label": "Bank Transactions Table",
+   "options": "Bank Transactions Table"
+  },
+  {
+   "default": "Today",
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "label": "Date"
+  },
+  {
+   "fieldname": "column_break_kcbp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_qgzl",
+   "fieldtype": "Section Break"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [
+  {
+   "link_doctype": "Bank Transaction",
+   "link_fieldname": "custom_created_from"
+  }
+ ],
+ "modified": "2025-12-29 14:35:54.998413",
+ "modified_by": "Administrator",
+ "module": "Bank Management",
+ "name": "Bulk Bank Transaction",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -1,0 +1,123 @@
+# Copyright (c) 2025, abdopcnet@gmail.com and contributors
+# For license information, please see license.txt
+
+import frappe
+from frappe import _
+from frappe.model.document import Document
+from frappe.utils import flt, getdate
+
+
+class BulkBankTransaction(Document):
+    def validate(self):
+        # Validate that at least one row exists
+        if not self.bank_transactions_table:
+            frappe.throw(
+                _("Please add at least one Bank Transaction in the table"))
+
+        # Validate each row
+        for row in self.bank_transactions_table:
+            if not row.date:
+                frappe.throw(_("Date is required for all Bank Transactions"))
+
+            if not row.bank_account:
+                frappe.throw(
+                    _("Bank Account is required for all Bank Transactions"))
+
+            # At least one of deposit or withdrawal must be provided
+            if not flt(row.deposit) and not flt(row.withdrawal):
+                frappe.throw(
+                    _("Either Deposit or Withdrawal must be provided for row with date {0}").format(row.date))
+
+    @frappe.whitelist()
+    def create_bank_transactions(self):
+        """Create all Bank Transactions from the table as Draft"""
+        # Reload to get latest data
+        self.reload()
+
+        if not self.bank_transactions_table:
+            frappe.throw(_("No Bank Transactions to create"))
+
+        created_count = 0
+        errors = []
+
+        for idx, row in enumerate(self.bank_transactions_table, start=1):
+            try:
+                # Validate required fields
+                if not row.date:
+                    errors.append(_("Row {0}: Date is required").format(idx))
+                    continue
+
+                if not row.bank_account:
+                    errors.append(
+                        _("Row {0}: Bank Account is required").format(idx))
+                    continue
+
+                if not flt(row.deposit) and not flt(row.withdrawal):
+                    errors.append(
+                        _("Row {0}: Either Deposit or Withdrawal must be provided").format(idx))
+                    continue
+
+                # Get company from bank account if not provided in parent
+                company = self.company
+                if not company:
+                    company = frappe.db.get_value(
+                        "Bank Account", row.bank_account, "company")
+                    if not company:
+                        errors.append(_("Row {0}: Company not found for Bank Account {1}").format(
+                            idx, row.bank_account))
+                        continue
+
+                # Get currency from bank account's linked account, or company default
+                account = frappe.db.get_value(
+                    "Bank Account", row.bank_account, "account")
+                if account:
+                    currency = frappe.db.get_value(
+                        "Account", account, "account_currency")
+                else:
+                    currency = None
+
+                # Fallback to company default currency if not found
+                if not currency:
+                    currency = frappe.db.get_value(
+                        "Company", company, "default_currency")
+
+                if not currency:
+                    errors.append(_("Row {0}: Currency not found for Bank Account {1}").format(
+                        idx, row.bank_account))
+                    continue
+
+                # Create Bank Transaction
+                bank_transaction = frappe.new_doc("Bank Transaction")
+                bank_transaction.date = row.date
+                bank_transaction.bank_account = row.bank_account
+                bank_transaction.company = company
+                bank_transaction.deposit = flt(row.deposit)
+                bank_transaction.withdrawal = flt(row.withdrawal)
+                bank_transaction.currency = currency
+                bank_transaction.description = row.description or ""
+                bank_transaction.reference_number = row.reference_number or ""
+
+                # Insert as Draft (don't submit)
+                bank_transaction.insert()
+                created_count += 1
+
+            except Exception as e:
+                frappe.log_error(
+                    "[bulk_bank_transaction.py] method: create_bank_transactions", "Bulk Bank Transaction")
+                errors.append(_("Row {0}: {1}").format(idx, str(e)))
+
+        # Show message
+        message = _("{0} Bank Transaction(s) created successfully").format(
+            created_count)
+        if errors:
+            message += "\n\n" + _("Errors:\n{0}").format("\n".join(errors))
+            frappe.msgprint(message, title=_(
+                "Bank Transactions Created"), indicator="orange" if errors else "green")
+        else:
+            frappe.msgprint(message, title=_(
+                "Bank Transactions Created"), indicator="green")
+
+        return {
+            "created": created_count,
+            "errors": errors
+        }
