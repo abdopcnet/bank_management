@@ -54,6 +54,11 @@ function create_bank_transactions(frm) {
 }
 
 function call_create_method(frm) {
+	// Count rows without bank_transaction already set
+	let rows_to_create = frm.doc.bank_transactions_table.filter(function (row) {
+		return !row.bank_transaction;
+	}).length;
+
 	// Use frm.call() with doc to call Document method correctly
 	frm.call({
 		doc: frm.doc,
@@ -69,7 +74,7 @@ function call_create_method(frm) {
 						]),
 						indicator: 'green',
 					});
-					// Refresh the form
+					// Refresh the form to show updated bank_transaction links
 					frm.reload_doc();
 				}
 				if (r.message.errors && r.message.errors.length > 0) {
