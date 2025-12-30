@@ -141,105 +141,93 @@ def get_columns(filters):
             "fieldname": "bt_name",
             "label": "Bank Transaction",
             "fieldtype": "Link",
-            "options": "Bank Transaction",
-            "width": 150
+            "options": "Bank Transaction"
         },
         {
             "fieldname": "bt_date",
             "label": "BT Date",
-            "fieldtype": "Date",
-            "width": 100
+            "fieldtype": "Date"
         },
         {
             "fieldname": "bt_deposit",
             "label": "BT Deposit",
-            "fieldtype": "Currency",
-            "width": 120
+            "fieldtype": "Currency"
         },
         {
             "fieldname": "bt_withdrawal",
             "label": "BT Withdrawal",
-            "fieldtype": "Currency",
-            "width": 120
+            "fieldtype": "Currency"
         },
         {
             "fieldname": "bt_reference_number",
             "label": "BT Reference No",
-            "fieldtype": "Data",
-            "width": 140
+            "fieldtype": "Data"
         },
         {
             "fieldname": "bt_unallocated_amount",
             "label": "BT Unallocated",
-            "fieldtype": "Currency",
-            "width": 120
+            "fieldtype": "Currency"
         },
         {
             "fieldname": "voucher_doc_type",
             "label": "Voucher Type",
-            "fieldtype": "Data",
-            "width": 120
+            "fieldtype": "Data"
         },
         {
             "fieldname": "voucher_name",
             "label": "Voucher Name",
             "fieldtype": "Dynamic Link",
-            "options": "voucher_doc_type",
-            "width": 150
+            "options": "voucher_doc_type"
         },
         {
             "fieldname": "voucher_reference_no",
             "label": "Voucher Ref No",
-            "fieldtype": "Data",
-            "width": 140
+            "fieldtype": "Data"
         },
         {
             "fieldname": "voucher_posting_date",
             "label": "Voucher Date",
-            "fieldtype": "Date",
-            "width": 100
+            "fieldtype": "Date"
         },
         {
             "fieldname": "voucher_amount",
             "label": "Voucher Amount",
-            "fieldtype": "Currency",
-            "width": 120
+            "fieldtype": "Currency"
+        },
+        {
+            "fieldname": "voucher_party_type",
+            "label": "Voucher Party Type",
+            "fieldtype": "Data"
         },
         {
             "fieldname": "voucher_party",
             "label": "Voucher Party",
-            "fieldtype": "Data",
-            "width": 120
+            "fieldtype": "Data"
         },
         {
             "fieldname": "reconciled_status",
             "label": "Status",
-            "fieldtype": "Data",
-            "width": 100
+            "fieldtype": "Data"
         },
         {
             "fieldname": "btn_reconcile",
             "label": "Reconcile",
-            "fieldtype": "HTML",
-            "width": 120
+            "fieldtype": "HTML"
         },
         {
             "fieldname": "btn_create_pe",
             "label": "Create Payment Entry",
-            "fieldtype": "HTML",
-            "width": 160
+            "fieldtype": "HTML"
         },
         {
             "fieldname": "btn_create_je",
             "label": "Create Journal Entry",
-            "fieldtype": "HTML",
-            "width": 160
+            "fieldtype": "HTML"
         },
         {
             "fieldname": "btn_create_bt",
             "label": "Create Bank Transaction",
-            "fieldtype": "HTML",
-            "width": 180
+            "fieldtype": "HTML"
         }
     ]
 
@@ -262,15 +250,15 @@ def get_data(filters):
     # Use bank_statement_from_date/to_date or fallback to from_date/to_date
     from_date = filters.get(
         "bank_statement_from_date") or filters.get("from_date")
-    to_date = filters.get("bank_statement_to_date") or filters.get("to_date")
+    to_date = filters.get(
+        "bank_statement_to_date") or filters.get("to_date")
 
-    if from_date:
+    if from_date and to_date:
+        bt_filters["date"] = ["between", [from_date, to_date]]
+    elif from_date:
         bt_filters["date"] = [">=", from_date]
-    if to_date:
-        if "date" in bt_filters and isinstance(bt_filters["date"], list):
-            bt_filters["date"].append(["<=", to_date])
-        else:
-            bt_filters["date"] = ["<=", to_date]
+    elif to_date:
+        bt_filters["date"] = ["<=", to_date]
 
     # Filter by reference date if enabled
     if filters.get("filter_by_reference_date"):
@@ -299,6 +287,11 @@ def get_data(filters):
             bt_filters["status"] = ["in", ["Pending", "Unreconciled"]]
             bt_filters["unallocated_amount"] = [">", 0]
 
+    # Filter: Show Unmatched Vouchers - only show Unreconciled Bank Transactions
+    if filters.get("show_unmatched_vouchers"):
+        bt_filters["status"] = ["in", ["Pending", "Unreconciled"]]
+        bt_filters["unallocated_amount"] = [">", 0]
+
     bank_transactions = frappe.get_all(
         "Bank Transaction",
         fields=[
@@ -320,13 +313,11 @@ def get_data(filters):
         order_by="date desc, reference_number"
     )
 
-    # Counter for numbering rows with same reference number
-    row_counter = {}
+    # Track all matched vouchers to exclude them when showing unmatched
+    all_matched_vouchers = set()
 
+    # First: Show all Bank Transactions with matched vouchers (one row per BT with matched voucher)
     for bt in bank_transactions:
-        # Get linked vouchers for this bank transaction
-        linked_vouchers = get_linked_vouchers(bt.name)
-
         base_row = {
             "bt_name": bt.name,
             "bt_date": bt.date,
@@ -336,60 +327,31 @@ def get_data(filters):
             "bt_unallocated_amount": flt(bt.unallocated_amount),
         }
 
-        # Get unmatched vouchers (always show potential matches, not just when checkbox is checked)
-        unmatched_vouchers = []
-        if flt(bt.unallocated_amount) > 0:
-            unmatched_vouchers = get_unmatched_vouchers(bt, filters)
+        # Get matched voucher (linked or unmatched by reference_number)
+        matched_voucher = get_matched_voucher_for_bt(bt, filters)
 
-        # Initialize counter for this reference number
-        ref_key = bt.reference_number or bt.name
-        if ref_key not in row_counter:
-            row_counter[ref_key] = 0
-
-        if linked_vouchers:
-            # Add row for each linked voucher (one row per voucher)
-            for voucher in linked_vouchers:
-                row_counter[ref_key] += 1
-                voucher_row = base_row.copy()
-                voucher_row.update({
-                    "voucher_doc_type": voucher.get("doctype", ""),
-                    "voucher_name": voucher.get("name", ""),
-                    "voucher_reference_no": voucher.get("reference_no", ""),
-                    "voucher_posting_date": voucher.get("posting_date", ""),
-                    "voucher_amount": flt(voucher.get("amount", 0)),
-                    "voucher_party": voucher.get("party", ""),
-                    "reconciled_status": get_status_emoji(bt.status, flt(bt.unallocated_amount), has_voucher=True, is_matched=True, row_number=row_counter[ref_key]),
-                    "btn_reconcile": get_reconcile_button(bt.name, flt(bt.unallocated_amount), voucher.get("name"), voucher.get("doctype"), bt.status),
-                    "btn_create_pe": get_create_pe_button(bt.name, flt(bt.unallocated_amount), bt.party_type, bt.party, bt.reference_number, bt.date, has_voucher=True, voucher_type=voucher.get("doctype")),
-                    "btn_create_je": get_create_je_button(bt.name, flt(bt.unallocated_amount), has_voucher=True, voucher_type=voucher.get("doctype")),
-                    "btn_create_bt": get_create_bt_button(voucher.get("doctype"), voucher.get("name"), has_bt=True)
-                })
-                data.append(voucher_row)
-
-        # Show unmatched vouchers for this bank transaction (by reference number)
-        # Each unmatched voucher gets its own row
-        for voucher in unmatched_vouchers:
-            row_counter[ref_key] += 1
-            unmatched_row = base_row.copy()
-            unmatched_row.update({
-                "voucher_doc_type": voucher.get("doctype", ""),
-                "voucher_name": voucher.get("name", ""),
-                "voucher_reference_no": voucher.get("reference_no", ""),
-                "voucher_posting_date": voucher.get("posting_date", ""),
-                "voucher_amount": flt(voucher.get("amount", 0)),
-                "voucher_party": voucher.get("party", ""),
-                "reconciled_status": get_status_emoji(bt.status, flt(bt.unallocated_amount), has_voucher=True, is_matched=False, row_number=row_counter[ref_key]),
-                "btn_reconcile": get_reconcile_button(bt.name, flt(bt.unallocated_amount), voucher.get("name"), voucher.get("doctype"), bt.status),
-                "btn_create_pe": get_create_pe_button(bt.name, flt(bt.unallocated_amount), bt.party_type, bt.party, bt.reference_number, bt.date, has_voucher=True, voucher_type=voucher.get("doctype")),
-                "btn_create_je": get_create_je_button(bt.name, flt(bt.unallocated_amount), has_voucher=True, voucher_type=voucher.get("doctype")),
-                "btn_create_bt": get_create_bt_button(voucher.get("doctype"), voucher.get("name"), has_bt=True)
+        if matched_voucher:
+            # Case 1, 2, 3: BT with matched voucher - show in same row
+            all_matched_vouchers.add(
+                (matched_voucher.get("doctype"), matched_voucher.get("name")))
+            row = base_row.copy()
+            row.update({
+                "voucher_doc_type": matched_voucher.get("doctype", ""),
+                "voucher_name": matched_voucher.get("name", ""),
+                "voucher_reference_no": matched_voucher.get("reference_no", ""),
+                "voucher_posting_date": matched_voucher.get("posting_date", ""),
+                "voucher_amount": flt(matched_voucher.get("amount", 0)),
+                "voucher_party_type": matched_voucher.get("party_type", ""),
+                "voucher_party": matched_voucher.get("party", ""),
+                "reconciled_status": get_status_emoji(bt.status, flt(bt.unallocated_amount), has_voucher=True, is_matched=matched_voucher.get("is_linked", False), row_number=1),
+                "btn_reconcile": get_reconcile_button(bt.name, flt(bt.unallocated_amount), matched_voucher.get("name"), matched_voucher.get("doctype"), bt.status) if not matched_voucher.get("is_linked", False) else "",
+                "btn_create_pe": "",
+                "btn_create_je": "",
+                "btn_create_bt": ""
             })
-            data.append(unmatched_row)
-
-        # Show empty row (Bank Transaction only) ONLY if no vouchers at all
-        # This row allows creating new Payment Entry or Journal Entry
-        if not linked_vouchers and not unmatched_vouchers:
-            row_counter[ref_key] += 1
+            data.append(row)
+        else:
+            # BT without matched voucher - show BT only with create buttons
             row = base_row.copy()
             row.update({
                 "voucher_doc_type": "",
@@ -397,8 +359,9 @@ def get_data(filters):
                 "voucher_reference_no": "",
                 "voucher_posting_date": "",
                 "voucher_amount": 0,
+                "voucher_party_type": "",
                 "voucher_party": "",
-                "reconciled_status": get_status_emoji(bt.status, flt(bt.unallocated_amount), has_voucher=False, is_matched=False, row_number=row_counter[ref_key]),
+                "reconciled_status": get_status_emoji(bt.status, flt(bt.unallocated_amount), has_voucher=False, is_matched=False, row_number=1),
                 "btn_reconcile": get_reconcile_button(bt.name, flt(bt.unallocated_amount)),
                 "btn_create_pe": get_create_pe_button(bt.name, flt(bt.unallocated_amount), bt.party_type, bt.party, bt.reference_number, bt.date),
                 "btn_create_je": get_create_je_button(bt.name, flt(bt.unallocated_amount)),
@@ -406,7 +369,227 @@ def get_data(filters):
             })
             data.append(row)
 
+    # Second: Show unmatched Payment Entries (Case 5)
+    unmatched_payment_entries = get_unmatched_payment_entries(
+        filters, all_matched_vouchers)
+    for pe in unmatched_payment_entries:
+        row = {
+            "bt_name": "",
+            "bt_date": "",
+            "bt_deposit": 0,
+            "bt_withdrawal": 0,
+            "bt_reference_number": pe.get("reference_no", ""),
+            "bt_unallocated_amount": 0,
+            "voucher_doc_type": "Payment Entry",
+            "voucher_name": pe.get("name", ""),
+            "voucher_reference_no": pe.get("reference_no", ""),
+            "voucher_posting_date": pe.get("posting_date", ""),
+            "voucher_amount": flt(pe.get("amount", 0)),
+            "voucher_party_type": pe.get("party_type", ""),
+            "voucher_party": pe.get("party", ""),
+            "reconciled_status": "❌ Unmatched",
+            "btn_reconcile": "",
+            "btn_create_pe": "",
+            "btn_create_je": "",
+            "btn_create_bt": get_create_bt_button("Payment Entry", pe.get("name"), has_bt=False)
+        }
+        data.append(row)
+
+    # Third: Show unmatched Journal Entries (Case 4)
+    unmatched_journal_entries = get_unmatched_journal_entries(
+        filters, all_matched_vouchers)
+    for je in unmatched_journal_entries:
+        row = {
+            "bt_name": "",
+            "bt_date": "",
+            "bt_deposit": 0,
+            "bt_withdrawal": 0,
+            "bt_reference_number": je.get("cheque_no", ""),
+            "bt_unallocated_amount": 0,
+            "voucher_doc_type": "Journal Entry",
+            "voucher_name": je.get("name", ""),
+            "voucher_reference_no": je.get("cheque_no", ""),
+            "voucher_posting_date": je.get("posting_date", ""),
+            "voucher_amount": flt(je.get("amount", 0)),
+            "voucher_party_type": je.get("party_type", ""),
+            "voucher_party": je.get("party", ""),
+            "reconciled_status": "❌ Unmatched",
+            "btn_reconcile": "",
+            "btn_create_pe": "",
+            "btn_create_je": "",
+            "btn_create_bt": get_create_bt_button("Journal Entry", je.get("name"), has_bt=False)
+        }
+        data.append(row)
+
     return data
+
+
+def get_matched_voucher_for_bt(bank_transaction, filters):
+    """
+    Get matched voucher for Bank Transaction based on exact matching rules:
+    - Case 1: BT withdrawal + PE payment_type = Pay + same reference_number
+    - Case 2: BT deposit + PE payment_type = Receive + same reference_number
+    - Case 3: BT withdrawal + JE cheque_no + same reference_number
+    """
+    if not bank_transaction.reference_number:
+        return None
+
+    try:
+        bank_account_doc = frappe.get_doc(
+            "Bank Account", bank_transaction.bank_account)
+        bank_gl_account = bank_account_doc.account
+
+        # First: Check linked vouchers
+        linked = frappe.get_all(
+            "Bank Transaction Payments",
+            filters={"parent": bank_transaction.name},
+            fields=["payment_entry", "payment_document"],
+            limit=1
+        )
+
+        if linked:
+            link = linked[0]
+            try:
+                doc = frappe.get_cached_doc(
+                    link.payment_document, link.payment_entry)
+                voucher_data = {
+                    "doctype": link.payment_document,
+                    "name": link.payment_entry,
+                    "is_linked": True
+                }
+
+                if link.payment_document == "Payment Entry":
+                    voucher_data.update({
+                        "reference_no": doc.reference_no or "",
+                        "posting_date": doc.posting_date,
+                        "amount": flt(doc.base_paid_amount_after_tax),
+                        "party_type": doc.party_type or "",
+                        "party": doc.party or ""
+                    })
+                elif link.payment_document == "Journal Entry":
+                    voucher_data.update({
+                        "reference_no": doc.cheque_no or "",
+                        "posting_date": doc.posting_date,
+                        "amount": 0,  # Will calculate from accounts
+                        "party_type": "",  # Journal Entry doesn't have party_type at document level
+                        "party": doc.pay_to_recd_from or ""
+                    })
+
+                return voucher_data
+            except:
+                pass
+
+        # Second: Check unmatched vouchers by reference_number
+        # Case 1 & 2: Payment Entry matching
+        if bank_transaction.reference_number:
+            payment_type = "Receive" if bank_transaction.deposit > 0.0 else "Pay"
+
+            pe_filters = {
+                "company": bank_transaction.company,
+                "docstatus": 1,
+                "clearance_date": ["is", "not set"],
+                "reference_no": bank_transaction.reference_number,
+                "payment_type": payment_type
+            }
+
+            # Date filters - use SQL for better control
+            from_date = filters.get(
+                "bank_statement_from_date") or filters.get("from_date")
+            to_date = filters.get(
+                "bank_statement_to_date") or filters.get("to_date")
+
+            payment_entries = frappe.db.sql("""
+                SELECT
+                    name,
+                    posting_date,
+                    reference_no,
+                    reference_date,
+                    party,
+                    party_type,
+                    base_paid_amount_after_tax as paid_amount
+                FROM `tabPayment Entry`
+                WHERE company = %(company)s
+                    AND docstatus = 1
+                    AND (clearance_date IS NULL OR clearance_date = '')
+                    AND reference_no = %(reference_no)s
+                    AND payment_type = %(payment_type)s
+                    AND (paid_to = %(bank_account)s OR paid_from = %(bank_account)s)
+                    AND (%(from_date)s IS NULL OR posting_date >= %(from_date)s)
+                    AND (%(to_date)s IS NULL OR posting_date <= %(to_date)s)
+                LIMIT 1
+            """, {
+                "company": bank_transaction.company,
+                "reference_no": bank_transaction.reference_number,
+                "payment_type": payment_type,
+                "bank_account": bank_gl_account,
+                "from_date": from_date or None,
+                "to_date": to_date or None
+            }, as_dict=True)
+
+            if payment_entries:
+                pe = payment_entries[0]
+                # Verify matching: Case 1 or Case 2
+                if (bank_transaction.withdrawal > 0 and payment_type == "Pay") or \
+                   (bank_transaction.deposit > 0 and payment_type == "Receive"):
+                    return {
+                        "doctype": "Payment Entry",
+                        "name": pe.name,
+                        "reference_no": pe.reference_no or "",
+                        "posting_date": pe.posting_date,
+                        "amount": flt(pe.paid_amount),
+                        "party_type": pe.party_type or "",
+                        "party": pe.party or "",
+                        "is_linked": False
+                    }
+
+        # Case 3: Journal Entry matching (only for withdrawal)
+        if bank_transaction.withdrawal > 0 and bank_transaction.reference_number:
+            journal_entries = frappe.db.sql("""
+                SELECT DISTINCT
+                    je.name,
+                    je.posting_date,
+                    je.cheque_no,
+                    je.pay_to_recd_from as party,
+                    SUM(jea.debit_in_account_currency - jea.credit_in_account_currency) as amount
+                FROM `tabJournal Entry` je
+                INNER JOIN `tabJournal Entry Account` jea ON jea.parent = je.name
+                WHERE je.company = %(company)s
+                    AND je.docstatus = 1
+                    AND je.clearance_date IS NULL
+                    AND je.voucher_type != 'Opening Entry'
+                    AND je.cheque_no = %(cheque_no)s
+                    AND jea.account = %(bank_account)s
+                    AND (je.posting_date >= %(date_from)s OR %(date_from)s IS NULL)
+                    AND (je.posting_date <= %(date_to)s OR %(date_to)s IS NULL)
+                GROUP BY je.name
+                LIMIT 1
+            """, {
+                "company": bank_transaction.company,
+                "cheque_no": bank_transaction.reference_number,
+                "bank_account": bank_gl_account,
+                "date_from": filters.get("bank_statement_from_date") or filters.get("from_date") or None,
+                "date_to": filters.get("bank_statement_to_date") or filters.get("to_date") or None
+            }, as_dict=True)
+
+            if journal_entries:
+                je = journal_entries[0]
+                return {
+                    "doctype": "Journal Entry",
+                    "name": je.name,
+                    "reference_no": je.cheque_no or "",
+                    "posting_date": je.posting_date,
+                    "amount": abs(flt(je.amount)),
+                    "party_type": "",  # Journal Entry doesn't have party_type at document level
+                    "party": je.party or "",
+                    "is_linked": False
+                }
+
+        return None
+
+    except Exception as e:
+        frappe.log_error(
+            "[bank_reconcile_report.py] method: get_matched_voucher_for_bt", "Bank Reconcile Report")
+        return None
 
 
 def get_linked_vouchers(bank_transaction_name):
@@ -456,6 +639,182 @@ def get_linked_vouchers(bank_transaction_name):
     return vouchers
 
 
+def get_unmatched_payment_entries(filters, matched_vouchers):
+    """
+    Get Payment Entries that are NOT matched to any Bank Transaction (Case 5)
+    """
+    try:
+        if not filters.get("bank_account") or not filters.get("company"):
+            return []
+
+        bank_account_doc = frappe.get_doc(
+            "Bank Account", filters.get("bank_account"))
+        bank_gl_account = bank_account_doc.account
+
+        from_date = filters.get(
+            "bank_statement_from_date") or filters.get("from_date")
+        to_date = filters.get(
+            "bank_statement_to_date") or filters.get("to_date")
+
+        # Use SQL for better control and to handle filters correctly
+        payment_entries = frappe.db.sql("""
+            SELECT
+                name,
+                posting_date,
+                reference_no,
+                reference_date,
+                party,
+                party_type,
+                payment_type,
+                base_paid_amount_after_tax as paid_amount
+            FROM `tabPayment Entry`
+            WHERE company = %(company)s
+                AND docstatus = 1
+                AND (clearance_date IS NULL OR clearance_date = '')
+                AND reference_no IS NOT NULL
+                AND reference_no != ''
+                AND (paid_to = %(bank_account)s OR paid_from = %(bank_account)s)
+                AND (%(from_date)s IS NULL OR posting_date >= %(from_date)s)
+                AND (%(to_date)s IS NULL OR posting_date <= %(to_date)s)
+            ORDER BY posting_date DESC
+        """, {
+            "company": filters.get("company"),
+            "bank_account": bank_gl_account,
+            "from_date": from_date or None,
+            "to_date": to_date or None
+        }, as_dict=True)
+
+        # Filter out matched vouchers
+        unmatched = []
+        for pe in payment_entries:
+            match_key = ("Payment Entry", pe.name)
+            if match_key not in matched_vouchers:
+                # Check if this PE has a matching BT by reference_number and payment_type
+                # Use SQL to check matching based on exact rules
+                matching_bt = frappe.db.sql("""
+                    SELECT name, deposit, withdrawal
+                    FROM `tabBank Transaction`
+                    WHERE reference_number = %(reference_no)s
+                        AND company = %(company)s
+                        AND bank_account = %(bank_account)s
+                        AND docstatus = 1
+                        AND (
+                            (deposit > 0 AND %(payment_type)s = 'Receive') OR
+                            (withdrawal > 0 AND %(payment_type)s = 'Pay')
+                        )
+                    LIMIT 1
+                """, {
+                    "reference_no": pe.reference_no,
+                    "company": filters.get("company"),
+                    "bank_account": filters.get("bank_account"),
+                    "payment_type": pe.get("payment_type", "")
+                }, as_dict=True)
+
+                # If no matching BT found, add to unmatched
+                if not matching_bt:
+                    unmatched.append({
+                        "name": pe.name,
+                        "posting_date": pe.posting_date,
+                        "reference_no": pe.reference_no or "",
+                        "amount": flt(pe.paid_amount),
+                        "party_type": pe.party_type or "",
+                        "party": pe.party or ""
+                    })
+
+        return unmatched
+
+    except Exception as e:
+        frappe.log_error(
+            "[bank_reconcile_report.py] method: get_unmatched_payment_entries", "Bank Reconcile Report")
+        return []
+
+
+def get_unmatched_journal_entries(filters, matched_vouchers):
+    """
+    Get Journal Entries that are NOT matched to any Bank Transaction (Case 4)
+    """
+    try:
+        if not filters.get("bank_account") or not filters.get("company"):
+            return []
+
+        bank_account_doc = frappe.get_doc(
+            "Bank Account", filters.get("bank_account"))
+        bank_gl_account = bank_account_doc.account
+
+        from_date = filters.get(
+            "bank_statement_from_date") or filters.get("from_date")
+        to_date = filters.get(
+            "bank_statement_to_date") or filters.get("to_date")
+
+        journal_entries = frappe.db.sql("""
+            SELECT DISTINCT
+                je.name,
+                je.posting_date,
+                je.cheque_no,
+                je.pay_to_recd_from as party,
+                MAX(jea.party_type) as party_type,
+                SUM(jea.debit_in_account_currency - jea.credit_in_account_currency) as amount
+            FROM `tabJournal Entry` je
+            INNER JOIN `tabJournal Entry Account` jea ON jea.parent = je.name
+            WHERE je.company = %(company)s
+                AND je.docstatus = 1
+                AND je.clearance_date IS NULL
+                AND je.voucher_type != 'Opening Entry'
+                AND je.cheque_no IS NOT NULL
+                AND je.cheque_no != ''
+                AND jea.account = %(bank_account)s
+                AND (je.posting_date >= %(date_from)s OR %(date_from)s IS NULL)
+                AND (je.posting_date <= %(date_to)s OR %(date_to)s IS NULL)
+            GROUP BY je.name
+            ORDER BY je.posting_date DESC
+        """, {
+            "company": filters.get("company"),
+            "bank_account": bank_gl_account,
+            "date_from": from_date or None,
+            "date_to": to_date or None
+        }, as_dict=True)
+
+        # Filter out matched vouchers and check for matching BT
+        unmatched = []
+        for je in journal_entries:
+            match_key = ("Journal Entry", je.name)
+            if match_key not in matched_vouchers:
+                # Check if this JE has a matching BT by cheque_no
+                # JE matches BT withdrawal only (Case 3)
+                matching_bt = frappe.db.sql("""
+                    SELECT name
+                    FROM `tabBank Transaction`
+                    WHERE reference_number = %(cheque_no)s
+                        AND company = %(company)s
+                        AND bank_account = %(bank_account)s
+                        AND docstatus = 1
+                        AND withdrawal > 0
+                    LIMIT 1
+                """, {
+                    "cheque_no": je.cheque_no,
+                    "company": filters.get("company"),
+                    "bank_account": filters.get("bank_account")
+                }, as_dict=True)
+
+                # If no matching BT found, add to unmatched
+                if not matching_bt:
+                    unmatched.append({
+                        "name": je.name,
+                        "posting_date": je.posting_date,
+                        "cheque_no": je.cheque_no or "",
+                        "amount": abs(flt(je.amount)),
+                        "party_type": je.party_type or "",
+                        "party": je.party or ""
+                    })
+
+        return unmatched
+
+    except Exception as e:
+        frappe.log_error(
+            "[bank_reconcile_report.py] method: get_unmatched_journal_entries", "Bank Reconcile Report")
+        return []
+
+
 def get_unmatched_vouchers(bank_transaction, filters):
     """
     Get potential matching vouchers for bank transaction that are NOT yet linked.
@@ -468,6 +827,7 @@ def get_unmatched_vouchers(bank_transaction, filters):
     """
     vouchers = []
 
+    # If no reference_number, cannot match
     if not bank_transaction.reference_number:
         return vouchers
 
@@ -496,17 +856,22 @@ def get_unmatched_vouchers(bank_transaction, filters):
             "docstatus": 1,
             "clearance_date": ["is", "not set"],
             "reference_no": bank_transaction.reference_number,
-            "payment_type": payment_type
+            "payment_type": ["in", [payment_type, "Internal Transfer"]]
         }
 
-        if filters.get("from_date") or filters.get("to_date"):
-            if filters.get("from_date") and filters.get("to_date"):
-                pe_filters["posting_date"] = ["between", [
-                    filters.get("from_date"), filters.get("to_date")]]
-            elif filters.get("from_date"):
-                pe_filters["posting_date"] = [">=", filters.get("from_date")]
-            elif filters.get("to_date"):
-                pe_filters["posting_date"] = ["<=", filters.get("to_date")]
+        # Use bank_statement_from_date/to_date or fallback to from_date/to_date
+        from_date = filters.get(
+            "bank_statement_from_date") or filters.get("from_date")
+        to_date = filters.get(
+            "bank_statement_to_date") or filters.get("to_date")
+
+        if from_date or to_date:
+            if from_date and to_date:
+                pe_filters["posting_date"] = ["between", [from_date, to_date]]
+            elif from_date:
+                pe_filters["posting_date"] = [">=", from_date]
+            elif to_date:
+                pe_filters["posting_date"] = ["<=", to_date]
 
         payment_entries = frappe.get_all(
             "Payment Entry",
@@ -557,8 +922,8 @@ def get_unmatched_vouchers(bank_transaction, filters):
             "company": bank_transaction.company,
             "cheque_no": bank_transaction.reference_number,
             "bank_account": bank_gl_account,
-            "date_from": filters.get("from_date") or None,
-            "date_to": filters.get("to_date") or None
+            "date_from": filters.get("bank_statement_from_date") or filters.get("from_date") or None,
+            "date_to": filters.get("bank_statement_to_date") or filters.get("to_date") or None
         }, as_dict=True)
 
         for je in journal_entries:
