@@ -187,12 +187,11 @@ function setup_action_buttons(report) {
 		.on('click', '.create-pe-btn', function () {
 			const $btn = $(this);
 			const bt_name = $btn.data('bt');
-			const party_type = $btn.data('party-type');
-			const party = $btn.data('party');
 			const reference_number = $btn.data('reference-number');
 			const date = $btn.data('date');
 
-			create_payment_entry(bt_name, party_type, party, reference_number, date);
+			// Party type and party will be selected in dialog
+			create_payment_entry(bt_name, null, null, reference_number, date);
 		});
 
 	// Create Journal Entry button handler
@@ -300,58 +299,184 @@ function open_reconcile_dialog(bt_name) {
 }
 
 function create_payment_entry(bt_name, party_type, party, reference_number, date) {
-	const args = {
-		bank_transaction_name: bt_name,
-		party_type: party_type,
-		party: party,
-	};
+	// Get filters to access company
+	const filters = frappe.query_report.get_filter_values();
+	const company = filters.company || frappe.defaults.get_default('company');
 
-	// Add reference_number and reference_date if available
-	if (reference_number) {
-		args.reference_number = reference_number;
-	}
-	if (date) {
-		args.reference_date = date;
-		args.posting_date = date;
-	}
+	// Get Bank Transaction details for reference_number and dates if not provided
+	if (!reference_number || !date) {
+		frappe.call({
+			method: 'frappe.client.get',
+			args: {
+				doctype: 'Bank Transaction',
+				name: bt_name,
+			},
+			callback: function (r) {
+				if (r.exc || !r.message) {
+					frappe.msgprint(__('Error loading Bank Transaction'));
+					return;
+				}
 
-	frappe.call({
-		method: 'erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.create_payment_entry_bts',
-		args: args,
-		freeze: true,
-		freeze_message: __('Creating Payment Entry...'),
-		callback: function (r) {
-			if (!r.exc && r.message) {
-				// Payment Entry is already added to Bank Transaction by create_payment_entry_bts
-				// Just refresh the report
-				frappe.show_alert({
-					message: __('Payment Entry created and linked to Bank Transaction'),
-					indicator: 'green',
-				});
-				frappe.query_report.refresh();
+				const bt = r.message;
+				show_payment_entry_dialog(
+					bt_name,
+					bt.reference_number || null,
+					bt.date || null,
+					company,
+				);
+			},
+		});
+	} else {
+		show_payment_entry_dialog(bt_name, reference_number, date, company);
+	}
+}
+
+function show_payment_entry_dialog(bt_name, reference_number, date, company) {
+	// Create dialog for selecting party_type and party
+	const dialog = new frappe.ui.Dialog({
+		title: __('Create Payment Entry'),
+		fields: [
+			{
+				fieldtype: 'Link',
+				fieldname: 'party_type',
+				label: __('Party Type'),
+				options: 'DocType',
+				reqd: 1,
+				get_query: () => ({
+					filters: {
+						name: ['in', Object.keys(frappe.boot.party_account_types || {})],
+					},
+				}),
+			},
+			{
+				fieldtype: 'Dynamic Link',
+				fieldname: 'party',
+				label: __('Party'),
+				options: 'party_type',
+				reqd: 1,
+			},
+		],
+		primary_action_label: __('Create'),
+		primary_action: function (values) {
+			dialog.hide();
+
+			const args = {
+				bank_transaction_name: bt_name,
+				party_type: values.party_type,
+				party: values.party,
+			};
+
+			// Add reference_number and reference_date if available
+			if (reference_number) {
+				args.reference_number = reference_number;
 			}
+			if (date) {
+				args.reference_date = date;
+				args.posting_date = date;
+			}
+
+			frappe.call({
+				method: 'erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.create_payment_entry_bts',
+				args: args,
+				freeze: true,
+				freeze_message: __('Creating Payment Entry...'),
+				callback: function (r) {
+					if (!r.exc && r.message) {
+						// Payment Entry is already added to Bank Transaction by create_payment_entry_bts
+						// Just refresh the report
+						frappe.show_alert({
+							message: __('Payment Entry created and linked to Bank Transaction'),
+							indicator: 'green',
+						});
+						frappe.query_report.refresh();
+					}
+				},
+			});
 		},
 	});
+	dialog.show();
 }
 
 function create_journal_entry(bt_name) {
+	// Get filters to access company
+	const filters = frappe.query_report.get_filter_values();
+	const company = filters.company || frappe.defaults.get_default('company');
+
+	// Get Bank Transaction details for reference_number and dates
 	frappe.call({
-		method: 'erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.create_journal_entry_bts',
+		method: 'frappe.client.get',
 		args: {
-			bank_transaction_name: bt_name,
+			doctype: 'Bank Transaction',
+			name: bt_name,
 		},
-		freeze: true,
-		freeze_message: __('Creating Journal Entry...'),
 		callback: function (r) {
-			if (!r.exc && r.message) {
-				// Journal Entry is already added to Bank Transaction by create_journal_entry_bts
-				// Just refresh the report
-				frappe.show_alert({
-					message: __('Journal Entry created and linked to Bank Transaction'),
-					indicator: 'green',
-				});
-				frappe.query_report.refresh();
+			if (r.exc || !r.message) {
+				frappe.msgprint(__('Error loading Bank Transaction'));
+				return;
 			}
+
+			const bt = r.message;
+
+			// Create dialog for selecting bank expense account
+			const dialog = new frappe.ui.Dialog({
+				title: __('Create Journal Entry'),
+				fields: [
+					{
+						fieldtype: 'Link',
+						fieldname: 'second_account',
+						label: __('Bank Expense Account'),
+						options: 'Account',
+						reqd: 1,
+						get_query: () => ({
+							filters: {
+								is_group: 0,
+								company: company,
+							},
+						}),
+					},
+					{
+						fieldtype: 'Select',
+						fieldname: 'entry_type',
+						label: __('Journal Entry Type'),
+						options: 'Bank Entry\nJournal Entry',
+						default: 'Bank Entry',
+					},
+				],
+				primary_action_label: __('Create'),
+				primary_action: function (values) {
+					dialog.hide();
+
+					const args = {
+						bank_transaction_name: bt_name,
+						second_account: values.second_account,
+						entry_type: values.entry_type || 'Bank Entry',
+						reference_number: bt.reference_number || null,
+						reference_date: bt.date || null,
+						posting_date: bt.date || null,
+					};
+
+					frappe.call({
+						method: 'erpnext.accounts.doctype.bank_reconciliation_tool.bank_reconciliation_tool.create_journal_entry_bts',
+						args: args,
+						freeze: true,
+						freeze_message: __('Creating Journal Entry...'),
+						callback: function (r) {
+							if (!r.exc && r.message) {
+								// Journal Entry is already added to Bank Transaction by create_journal_entry_bts
+								// Just refresh the report
+								frappe.show_alert({
+									message: __(
+										'Journal Entry created and linked to Bank Transaction',
+									),
+									indicator: 'green',
+								});
+								frappe.query_report.refresh();
+							}
+						},
+					});
+				},
+			});
+			dialog.show();
 		},
 	});
 }
