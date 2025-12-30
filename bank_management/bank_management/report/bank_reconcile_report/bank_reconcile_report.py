@@ -4,7 +4,7 @@
 import frappe
 import json
 from frappe import _
-from frappe.utils import flt, getdate
+from frappe.utils import flt, getdate, add_days
 from erpnext.accounts.report.bank_reconciliation_statement.bank_reconciliation_statement import (
     get_amounts_not_reflected_in_system,
     get_entries,
@@ -1098,7 +1098,7 @@ def get_account_balance(bank_account, till_date, company):
 
 
 def get_report_summary(filters, data):
-    """Calculate and return report summary with closing balances"""
+    """Calculate and return report summary with opening and closing balances"""
     summary = []
 
     if not filters.get("bank_account") or not filters.get("company"):
@@ -1113,43 +1113,69 @@ def get_report_summary(filters, data):
     currency = get_account_currency(account) or frappe.db.get_value(
         "Company", filters.get("company"), "default_currency")
 
-    # Get closing balance as per bank statement
+    # Get account opening balance (before from_date by 1 day, like bank_reconciliation_tool)
+    from_date = filters.get(
+        "bank_statement_from_date") or filters.get("from_date")
+    account_opening_balance = 0.0
+    if from_date:
+        # Calculate opening date (one day before from_date)
+        opening_date = add_days(from_date, -1)
+
+        account_opening_balance = get_account_balance(
+            filters.get("bank_account"),
+            opening_date,
+            filters.get("company")
+        )
+
+    # Get closing balance as per bank statement from filters
     bank_statement_closing = flt(filters.get(
         "bank_statement_closing_balance", 0))
 
     # Get closing balance as per ERP (system)
     to_date = filters.get("bank_statement_to_date") or filters.get("to_date")
+    cleared_balance = 0.0
     if to_date:
         cleared_balance = get_account_balance(
             filters.get("bank_account"),
             to_date,
             filters.get("company")
         )
-    else:
-        cleared_balance = 0.0
 
     # Calculate difference
     difference = bank_statement_closing - cleared_balance
 
-    # Build summary
+    # Build summary with emojis and colors
+    # Account Opening Balance (from GL entry according to filter bank_statement_from_date)
     summary.append({
-        "value": cleared_balance,
-        "label": _("Closing Balance as per ERP"),
+        "value": account_opening_balance,
+        "label": _("💵 Account Opening Balance"),
         "indicator": "blue",
         "currency": currency
     })
 
+    # Account Closing Balance (from GL entry according to filter bank_statement_to_date)
+    summary.append({
+        "value": cleared_balance,
+        "label": _("💰 Account Closing Balance"),
+        "indicator": "blue",
+        "currency": currency
+    })
+
+    # Closing Balance as per Bank Statement (from filter bank_statement_closing_balance)
     summary.append({
         "value": bank_statement_closing,
-        "label": _("Closing Balance as per Bank Statement"),
+        "label": _("🏦 Closing Balance as per Bank Statement"),
         "indicator": "orange",
         "currency": currency
     })
 
+    # Difference
+    diff_indicator = "green" if abs(difference) < 0.01 else "red"
+    diff_emoji = "✅" if abs(difference) < 0.01 else "⚠️"
     summary.append({
         "value": abs(difference),
-        "label": _("Difference"),
-        "indicator": "green" if abs(difference) < 0.01 else "red",
+        "label": _("{0} Difference").format(diff_emoji),
+        "indicator": diff_indicator,
         "currency": currency
     })
 
