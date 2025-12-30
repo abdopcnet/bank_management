@@ -252,14 +252,19 @@ function setup_action_buttons(report) {
 			create_journal_entry(bt_name);
 		});
 
-	// Create Bank Transaction button
-	$(document).on('click', '.create-bt-btn', function () {
-		const $btn = $(this);
-		const voucher_doc_type = $btn.data('doctype');
-		const voucher_name = $btn.data('voucher');
+	// Create Bank Transaction button handler
+	$(document)
+		.off('click', '.create-bt-btn')
+		.on('click', '.create-bt-btn', function () {
+			const $btn = $(this);
+			const voucher_doc_type = $btn.data('doctype');
+			const voucher_name = $btn.data('voucher');
 
-		create_bank_transaction(voucher_doc_type, voucher_name);
-	});
+			// Disable button to prevent multiple clicks
+			$btn.prop('disabled', true);
+
+			create_bank_transaction(voucher_doc_type, voucher_name, $btn);
+		});
 }
 
 function reconcile_voucher(bt_name, voucher_name, doctype) {
@@ -529,7 +534,7 @@ function create_journal_entry(bt_name) {
 	});
 }
 
-function create_bank_transaction(voucher_doc_type, voucher_name) {
+function create_bank_transaction(voucher_doc_type, voucher_name, $btn) {
 	frappe.call({
 		method: 'bank_management.bank_management.report.bank_reconcile_report.bank_reconcile_report.create_bank_transaction_from_voucher',
 		args: {
@@ -539,6 +544,11 @@ function create_bank_transaction(voucher_doc_type, voucher_name) {
 		freeze: true,
 		freeze_message: __('Creating Bank Transaction...'),
 		callback: function (r) {
+			// Re-enable button
+			if ($btn) {
+				$btn.prop('disabled', false);
+			}
+
 			if (!r.exc && r.message) {
 				frappe.show_alert({
 					message: __('Bank Transaction created and linked to voucher'),
