@@ -16,6 +16,22 @@ from erpnext.accounts.utils import get_account_currency, get_balance_on
 def create_bank_transaction_from_voucher(voucher_doc_type, voucher_name, bank_account=None):
     """Create Bank Transaction from Payment Entry or Journal Entry"""
     try:
+        # Check if Bank Transaction already exists for this voucher
+        existing_bt = frappe.get_all(
+            "Bank Transaction Payments",
+            filters={
+                "payment_document": voucher_doc_type,
+                "payment_entry": voucher_name
+            },
+            fields=["parent"],
+            limit=1
+        )
+
+        if existing_bt:
+            frappe.throw(_("Bank Transaction already exists for {0} {1}. Please refresh the report.").format(
+                voucher_doc_type, voucher_name
+            ))
+
         voucher_doc = frappe.get_doc(voucher_doc_type, voucher_name)
 
         if voucher_doc_type == "Payment Entry":
