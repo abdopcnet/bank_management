@@ -3,7 +3,6 @@
 
 frappe.query_reports['Bank Reconcile Report'] = {
 	filters: [
-		// First row: company, bank_account, bank_statement_from_date, bank_statement_to_date, created_by
 		{
 			fieldname: 'company',
 			label: __('Company'),
@@ -30,11 +29,19 @@ frappe.query_reports['Bank Reconcile Report'] = {
 			},
 		},
 		{
+			fieldname: 'bank_statement_closing_balance',
+			label: __('Closing Balance'),
+			fieldtype: 'Currency',
+			depends_on: 'eval:doc.bank_account',
+			columns: 2,
+		},
+		{
 			fieldname: 'bank_statement_from_date',
 			label: __('From Date'),
 			fieldtype: 'Date',
 			default: frappe.datetime.month_start(),
 			depends_on: 'eval:!doc.filter_by_reference_date',
+			read_only: 0,
 			columns: 2,
 		},
 		{
@@ -43,6 +50,7 @@ frappe.query_reports['Bank Reconcile Report'] = {
 			fieldtype: 'Date',
 			default: frappe.datetime.month_end(),
 			depends_on: 'eval:!doc.filter_by_reference_date',
+			read_only: 0,
 			columns: 2,
 		},
 		{
@@ -52,7 +60,6 @@ frappe.query_reports['Bank Reconcile Report'] = {
 			options: 'User',
 			columns: 2,
 		},
-		// Second row: filter_by_reference_date, from_reference_date, to_reference_date, account_opening_balance, bank_statement_closing_balance
 		{
 			fieldname: 'filter_by_reference_date',
 			label: __('Filter by Reference Date'),
@@ -65,6 +72,7 @@ frappe.query_reports['Bank Reconcile Report'] = {
 			label: __('From Reference Date'),
 			fieldtype: 'Date',
 			depends_on: 'eval:doc.filter_by_reference_date',
+			read_only: 0,
 			columns: 2,
 		},
 		{
@@ -72,21 +80,7 @@ frappe.query_reports['Bank Reconcile Report'] = {
 			label: __('To Reference Date'),
 			fieldtype: 'Date',
 			depends_on: 'eval:doc.filter_by_reference_date',
-			columns: 2,
-		},
-		{
-			fieldname: 'account_opening_balance',
-			label: __('Account Opening Balance'),
-			fieldtype: 'Currency',
-			read_only: 1,
-			depends_on: 'eval:doc.bank_statement_from_date',
-			columns: 2,
-		},
-		{
-			fieldname: 'bank_statement_closing_balance',
-			label: __('Closing Balance'),
-			fieldtype: 'Currency',
-			depends_on: 'eval:doc.bank_statement_to_date',
+			read_only: 0,
 			columns: 2,
 		},
 		{
@@ -111,16 +105,70 @@ frappe.query_reports['Bank Reconcile Report'] = {
 			open_bulk_bank_transaction(report);
 		});
 
+		// Setup readonly logic for date fields based on filter_by_reference_date
+		setTimeout(() => {
+			let filter_by_ref_field = report.page.get_field('filter_by_reference_date');
+			if (filter_by_ref_field) {
+				// Setup onchange handler
+				let original_onchange = filter_by_ref_field.df.onchange;
+				filter_by_ref_field.df.onchange = function () {
+					let is_checked = this.get_value();
+
+					// Handle bank_statement dates
+					if (is_checked) {
+						// Clear and set readonly
+						report.set_filter_value('bank_statement_from_date', '');
+						report.set_filter_value('bank_statement_to_date', '');
+						report.page.get_field('bank_statement_from_date')?.set_read_only(1);
+						report.page.get_field('bank_statement_to_date')?.set_read_only(1);
+					} else {
+						report.page.get_field('bank_statement_from_date')?.set_read_only(0);
+						report.page.get_field('bank_statement_to_date')?.set_read_only(0);
+					}
+
+					// Handle reference dates
+					if (!is_checked) {
+						report.set_filter_value('from_reference_date', '');
+						report.set_filter_value('to_reference_date', '');
+						report.page.get_field('from_reference_date')?.set_read_only(1);
+						report.page.get_field('to_reference_date')?.set_read_only(1);
+					} else {
+						report.page.get_field('from_reference_date')?.set_read_only(0);
+						report.page.get_field('to_reference_date')?.set_read_only(0);
+					}
+
+					// Call original onchange if exists
+					if (original_onchange) {
+						original_onchange.call(this);
+					}
+				};
+
+				// Initialize readonly states
+				let filter_by_ref = report.get_filter_value('filter_by_reference_date');
+				if (filter_by_ref) {
+					report.page.get_field('bank_statement_from_date')?.set_read_only(1);
+					report.page.get_field('bank_statement_to_date')?.set_read_only(1);
+					report.page.get_field('from_reference_date')?.set_read_only(0);
+					report.page.get_field('to_reference_date')?.set_read_only(0);
+				} else {
+					report.page.get_field('bank_statement_from_date')?.set_read_only(0);
+					report.page.get_field('bank_statement_to_date')?.set_read_only(0);
+					report.page.get_field('from_reference_date')?.set_read_only(1);
+					report.page.get_field('to_reference_date')?.set_read_only(1);
+				}
+			}
+		}, 300);
+
 		// Set default dates
 		let filters = report.get_filter_values();
-		if (!filters.bank_statement_from_date) {
+		if (!filters.bank_statement_from_date && !filters.filter_by_reference_date) {
 			let today = frappe.datetime.get_today();
 			report.set_filter_value(
 				'bank_statement_from_date',
 				frappe.datetime.add_months(today, -1),
 			);
 		}
-		if (!filters.bank_statement_to_date) {
+		if (!filters.bank_statement_to_date && !filters.filter_by_reference_date) {
 			report.set_filter_value('bank_statement_to_date', frappe.datetime.get_today());
 		}
 	},
@@ -542,8 +590,19 @@ function open_general_ledger(report) {
 					include_default_book_entries: 1,
 				};
 
-				// Set route options and navigate
-				frappe.set_route('query-report', 'General Ledger', route_options);
+				// Set route options and navigate (open in new window)
+				const url = frappe.urllib.get_full_url(
+					'/app/query-report/General%20Ledger?' +
+						Object.keys(route_options)
+							.map(
+								(key) =>
+									encodeURIComponent(key) +
+									'=' +
+									encodeURIComponent(route_options[key]),
+							)
+							.join('&'),
+				);
+				window.open(url, '_blank');
 			}
 		},
 	});
@@ -552,14 +611,18 @@ function open_general_ledger(report) {
 function open_bulk_bank_transaction(report) {
 	const filters = report.get_filter_values();
 
-	// Open new Bulk Bank Transaction form with bank_account pre-filled
-	frappe.set_route('Form', 'Bulk Bank Transaction', 'new');
-
-	// Set bank_account after form loads
-	frappe.route_options = {
-		bank_account: filters.bank_account || '',
-		company: filters.company || '',
-	};
+	// Open new Bulk Bank Transaction form in new window with bank_account pre-filled
+	const url_params = [];
+	if (filters.bank_account) {
+		url_params.push('bank_account=' + encodeURIComponent(filters.bank_account));
+	}
+	if (filters.company) {
+		url_params.push('company=' + encodeURIComponent(filters.company));
+	}
+	const url = frappe.urllib.get_full_url(
+		'/app/bulk-bank-transaction/new' + (url_params.length ? '?' + url_params.join('&') : ''),
+	);
+	window.open(url, '_blank');
 }
 
 function add_filter_separator() {
