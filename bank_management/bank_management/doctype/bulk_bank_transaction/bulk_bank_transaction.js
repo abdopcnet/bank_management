@@ -9,12 +9,10 @@ frappe.ui.form.on('Bulk Bank Transaction', {
 				create_bank_transactions(frm);
 			});
 
-			// Add button to open Bank Reconcile Report
-			if (frm.doc.bank_account) {
-				frm.add_custom_button(__('Bank Reconcile Report'), function () {
-					open_bank_reconcile_report(frm);
-				});
-			}
+			// Add button to open Draft Bank Transactions in new window
+			frm.add_custom_button(__('Open Draft Bank Transactions'), function () {
+				open_draft_bank_transactions(frm);
+			});
 		}
 	},
 
@@ -88,29 +86,14 @@ function call_create_method(frm) {
 	});
 }
 
-function open_bank_reconcile_report(frm) {
-	if (!frm.doc.bank_account) {
-		frappe.msgprint(__('Please select Bank Account first'));
-		return;
-	}
-
-	// Get default company
-	let company = frm.doc.company || frappe.defaults.get_default('company');
-
-	// Build URL with filters
-	let filters = {
-		company: company,
-		bank_account: frm.doc.bank_account,
+function open_draft_bank_transactions(frm) {
+	// Set route options for filter: docstatus = 0 (Draft)
+	// Use URL parameter format for list view filter
+	frappe.route_options = {
+		docstatus: '0',
 	};
 
-	// Convert filters to URL format
-	let filter_string = Object.keys(filters)
-		.map((key) => `${key}=${encodeURIComponent(filters[key])}`)
-		.join('&');
-
-	// Open report
-	frappe.set_route('query-report', 'Bank Reconcile Report', {
-		company: company,
-		bank_account: frm.doc.bank_account,
-	});
+	// Open in new window
+	frappe.open_in_new_tab = true;
+	frappe.set_route('List', 'Bank Transaction');
 }
