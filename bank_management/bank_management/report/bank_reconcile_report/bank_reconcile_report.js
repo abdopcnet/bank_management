@@ -89,6 +89,16 @@ frappe.query_reports['Bank Reconcile Report'] = {
 			depends_on: 'eval:doc.bank_statement_to_date',
 			columns: 2,
 		},
+		{
+			fieldname: 'show_unmatched_vouchers',
+			label: __('Show Unmatched Vouchers'),
+			fieldtype: 'Check',
+			default: 0,
+			description: __(
+				'Show Payment Entries and Journal Entries that match by reference number and payment type but are not yet linked to Bank Transactions.',
+			),
+			columns: 2,
+		},
 	],
 
 	onload: function (report) {
