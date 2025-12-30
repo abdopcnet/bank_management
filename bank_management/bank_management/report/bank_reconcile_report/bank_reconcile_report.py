@@ -212,7 +212,8 @@ def get_columns(filters):
         {
             "fieldname": "btn_reconcile",
             "label": "Reconcile",
-            "fieldtype": "HTML"
+            "fieldtype": "HTML",
+            "width": 150
         },
         {
             "fieldname": "btn_create_pe",
@@ -351,7 +352,7 @@ def get_data(filters):
             })
             data.append(row)
         else:
-            # BT without matched voucher - show BT only with create buttons
+            # Case 3: BT without matched voucher - show BT only with create buttons (no reconcile button)
             row = base_row.copy()
             row.update({
                 "voucher_doc_type": "",
@@ -362,7 +363,7 @@ def get_data(filters):
                 "voucher_party_type": "",
                 "voucher_party": "",
                 "reconciled_status": get_status_emoji(bt.status, flt(bt.unallocated_amount), has_voucher=False, is_matched=False, row_number=1),
-                "btn_reconcile": get_reconcile_button(bt.name, flt(bt.unallocated_amount)),
+                "btn_reconcile": "",  # No reconcile button when no voucher exists
                 "btn_create_pe": get_create_pe_button(bt.name, flt(bt.unallocated_amount), bt.party_type, bt.party, bt.reference_number, bt.date),
                 "btn_create_je": get_create_je_button(bt.name, flt(bt.unallocated_amount)),
                 "btn_create_bt": ""
@@ -528,9 +529,16 @@ def get_matched_voucher_for_bt(bank_transaction, filters):
 
             if payment_entries:
                 pe = payment_entries[0]
-                # Verify matching: Case 1 or Case 2
-                if (bank_transaction.withdrawal > 0 and payment_type == "Pay") or \
-                   (bank_transaction.deposit > 0 and payment_type == "Receive"):
+                # Verify matching: Case 1 or Case 2 with amount check
+                amount_match = False
+                if bank_transaction.withdrawal > 0 and payment_type == "Pay":
+                    amount_match = abs(
+                        flt(bank_transaction.withdrawal) - flt(pe.paid_amount)) < 0.01
+                elif bank_transaction.deposit > 0 and payment_type == "Receive":
+                    amount_match = abs(
+                        flt(bank_transaction.deposit) - flt(pe.paid_amount)) < 0.01
+
+                if amount_match:
                     return {
                         "doctype": "Payment Entry",
                         "name": pe.name,
@@ -573,16 +581,22 @@ def get_matched_voucher_for_bt(bank_transaction, filters):
 
             if journal_entries:
                 je = journal_entries[0]
-                return {
-                    "doctype": "Journal Entry",
-                    "name": je.name,
-                    "reference_no": je.cheque_no or "",
-                    "posting_date": je.posting_date,
-                    "amount": abs(flt(je.amount)),
-                    "party_type": "",  # Journal Entry doesn't have party_type at document level
-                    "party": je.party or "",
-                    "is_linked": False
-                }
+                # Verify amount match for Journal Entry (withdrawal only)
+                je_amount = abs(flt(je.amount))
+                bt_withdrawal = flt(bank_transaction.withdrawal)
+                amount_match = abs(bt_withdrawal - je_amount) < 0.01
+
+                if amount_match:
+                    return {
+                        "doctype": "Journal Entry",
+                        "name": je.name,
+                        "reference_no": je.cheque_no or "",
+                        "posting_date": je.posting_date,
+                        "amount": je_amount,
+                        "party_type": "",  # Journal Entry doesn't have party_type at document level
+                        "party": je.party or "",
+                        "is_linked": False
+                    }
 
         return None
 
@@ -1004,13 +1018,15 @@ def get_reconcile_button(bt_name, unallocated_amount, voucher_name=None, voucher
     if status == "Reconciled":
         return ""
 
-    if unallocated_amount <= 0 and not voucher_name:
+    # Don't show reconcile button if no voucher is provided (Case 3)
+    # Reconcile button should only appear when there's a matched voucher to reconcile
+    if not voucher_name or not voucher_doc_type:
         return ""
 
-    if voucher_name and voucher_doc_type:
-        return f'<button class="btn btn-xs btn-primary reconcile-btn" data-bt="{bt_name}" data-voucher="{voucher_name}" data-doctype="{voucher_doc_type}">🔗 Reconcile</button>'
-    else:
-        return f'<button class="btn btn-xs btn-primary reconcile-btn" data-bt="{bt_name}">🔗 Reconcile</button>'
+    if unallocated_amount <= 0:
+        return ""
+
+    return f'<button class="btn btn-xs btn-primary reconcile-btn" data-bt="{bt_name}" data-voucher="{voucher_name}" data-doctype="{voucher_doc_type}">🔗 Reconcile</button>'
 
 
 def get_create_pe_button(bt_name, unallocated_amount, party_type, party, reference_number=None, date=None, has_voucher=False, voucher_type=None):
@@ -1024,11 +1040,10 @@ def get_create_pe_button(bt_name, unallocated_amount, party_type, party, referen
         return ""
     if unallocated_amount <= 0:
         return ""
-    if not party_type or not party:
-        return ""
+    # Remove party requirement check - party will be selected in dialog
     ref_no_attr = f' data-reference-number="{reference_number}"' if reference_number else ""
     date_attr = f' data-date="{date}"' if date else ""
-    return f'<button class="btn btn-xs btn-success create-pe-btn" data-bt="{bt_name}" data-party-type="{party_type}" data-party="{party}"{ref_no_attr}{date_attr}>➕ Payment Entry</button>'
+    return f'<button class="btn btn-xs btn-success create-pe-btn" data-bt="{bt_name}"{ref_no_attr}{date_attr}>➕ Payment Entry</button>'
 
 
 def get_create_je_button(bt_name, unallocated_amount, has_voucher=False, voucher_type=None):
