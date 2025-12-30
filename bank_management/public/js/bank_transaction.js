@@ -4,7 +4,8 @@
 frappe.ui.form.on('Bank Transaction', {
 	refresh(frm) {
 		// Add button to open Bank Reconcile Report in new window
-		if (!frm.is_new()) {
+		// Only show button when document is submitted (docstatus = 1)
+		if (!frm.is_new() && frm.doc.docstatus === 1) {
 			frm.add_custom_button(__('Bank Reconcile Report'), function () {
 				open_bank_reconcile_report_new_window(frm);
 			});
