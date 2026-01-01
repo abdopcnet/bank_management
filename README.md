@@ -1,36 +1,23 @@
-### Bank Management
+# Bank Management
 
-![Version](https://img.shields.io/badge/version-31.12.2025-blue)
+![Version](https://img.shields.io/badge/version-1.1.2026-blue)
 
+Bank reconciliation and transaction management for ERPNext.
 
-Bank Management
+## Features
 
-### Installation
+### Bank Reconciliation
+- Upload bank statements (CSV/XLS/XLSX)
+- Auto-reconcile transactions by reference number and date
+- Manual matching against existing vouchers
+- Create Payment Entry or Journal Entry from bank transactions
+- Bank Reconciliation Statement report
 
-You can install this app using the [bench](https://github.com/frappe/bench) CLI:
+### Bulk Bank Transactions
+- Import multiple bank transactions at once
+- Create draft bank transactions from bulk import
+- Link bank transactions to source bulk document
 
-```bash
-cd $PATH_TO_YOUR_BENCH
-bench get-app $URL_OF_THIS_REPO --branch develop
-bench install-app bank_management
-```
-
-### Contributing
-
-This app uses `pre-commit` for code formatting and linting. Please [install pre-commit](https://pre-commit.com/#installation) and enable it for this repository:
-
-```bash
-cd apps/bank_management
-pre-commit install
-```
-
-Pre-commit is configured to use the following tools for checking and formatting your code:
-
-- ruff
-- eslint
-- prettier
-- pyupgrade
-
-### License
-
-mit
+### Bank Transaction Creation
+- Create Bank Transaction from Payment Entry or Journal Entry
+- Auto-reconcile with source voucher
